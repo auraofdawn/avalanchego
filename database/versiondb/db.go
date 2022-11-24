@@ -4,6 +4,7 @@
 package versiondb
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"sync"
@@ -107,7 +108,9 @@ func (db *Database) Delete(key []byte) error {
 	return nil
 }
 
-func (db *Database) NewBatch() database.Batch { return &batch{db: db} }
+func (db *Database) NewBatch() database.Batch {
+	return &batch{db: db}
+}
 
 func (db *Database) NewIterator() database.Iterator {
 	return db.NewIteratorWithStartAndPrefix(nil, nil)
@@ -272,14 +275,14 @@ func (db *Database) isClosed() bool {
 	return db.db == nil
 }
 
-func (db *Database) HealthCheck() (interface{}, error) {
+func (db *Database) HealthCheck(ctx context.Context) (interface{}, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
 	if db.mem == nil {
 		return nil, database.ErrClosed
 	}
-	return db.db.HealthCheck()
+	return db.db.HealthCheck(ctx)
 }
 
 type keyValue struct {
@@ -306,7 +309,9 @@ func (b *batch) Delete(key []byte) error {
 	return nil
 }
 
-func (b *batch) Size() int { return b.size }
+func (b *batch) Size() int {
+	return b.size
+}
 
 func (b *batch) Write() error {
 	b.db.lock.Lock()
@@ -348,7 +353,9 @@ func (b *batch) Replay(w database.KeyValueWriterDeleter) error {
 }
 
 // Inner returns itself
-func (b *batch) Inner() database.Batch { return b }
+func (b *batch) Inner() database.Batch {
+	return b
+}
 
 // iterator walks over both the in memory database and the underlying database
 // at the same time.
@@ -455,9 +462,13 @@ func (it *iterator) Error() error {
 	return it.Iterator.Error()
 }
 
-func (it *iterator) Key() []byte { return it.key }
+func (it *iterator) Key() []byte {
+	return it.key
+}
 
-func (it *iterator) Value() []byte { return it.value }
+func (it *iterator) Value() []byte {
+	return it.value
+}
 
 func (it *iterator) Release() {
 	it.key = nil
