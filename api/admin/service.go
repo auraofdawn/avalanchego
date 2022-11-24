@@ -280,7 +280,7 @@ func (service *Admin) GetLoggerLevel(_ *http.Request, args *GetLoggerLevelArgs, 
 }
 
 // GetConfig returns the config that the node was started with.
-func (service *Admin) GetConfig(_ *http.Request, args *struct{}, reply *interface{}) error {
+func (service *Admin) GetConfig(_ *http.Request, _ *struct{}, reply *interface{}) error {
 	service.Log.Debug("Admin: GetConfig called")
 	*reply = service.NodeConfig
 	return nil
@@ -295,10 +295,11 @@ type LoadVMsReply struct {
 }
 
 // LoadVMs loads any new VMs available to the node and returns the added VMs.
-func (service *Admin) LoadVMs(_ *http.Request, _ *struct{}, reply *LoadVMsReply) error {
+func (service *Admin) LoadVMs(r *http.Request, _ *struct{}, reply *LoadVMsReply) error {
 	service.Log.Debug("Admin: LoadVMs called")
 
-	loadedVMs, failedVMs, err := service.VMRegistry.ReloadWithReadLock()
+	ctx := r.Context()
+	loadedVMs, failedVMs, err := service.VMRegistry.ReloadWithReadLock(ctx)
 	if err != nil {
 		return err
 	}

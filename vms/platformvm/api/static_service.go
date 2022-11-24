@@ -17,6 +17,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm/genesis"
+	"github.com/ava-labs/avalanchego/vms/platformvm/signer"
 	"github.com/ava-labs/avalanchego/vms/platformvm/stakeable"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs/txheap"
@@ -83,13 +84,14 @@ type PermissionlessValidator struct {
 	ValidationRewardOwner *Owner `json:"validationRewardOwner,omitempty"`
 	// The owner of the rewards from delegations during the validation period,
 	// if applicable.
-	DelegationRewardOwner *Owner        `json:"delegationRewardOwner,omitempty"`
-	PotentialReward       *json.Uint64  `json:"potentialReward,omitempty"`
-	DelegationFee         json.Float32  `json:"delegationFee"`
-	ExactDelegationFee    *json.Uint32  `json:"exactDelegationFee,omitempty"`
-	Uptime                *json.Float32 `json:"uptime,omitempty"`
-	Connected             bool          `json:"connected"`
-	Staked                []UTXO        `json:"staked,omitempty"`
+	DelegationRewardOwner *Owner                    `json:"delegationRewardOwner,omitempty"`
+	PotentialReward       *json.Uint64              `json:"potentialReward,omitempty"`
+	DelegationFee         json.Float32              `json:"delegationFee"`
+	ExactDelegationFee    *json.Uint32              `json:"exactDelegationFee,omitempty"`
+	Uptime                *json.Float32             `json:"uptime,omitempty"`
+	Connected             bool                      `json:"connected"`
+	Staked                []UTXO                    `json:"staked,omitempty"`
+	Signer                *signer.ProofOfPossession `json:"signer,omitempty"`
 	// The delegators delegating to this validator
 	Delegators []PrimaryDelegator `json:"delegators"`
 }
@@ -169,7 +171,7 @@ func bech32ToID(addrStr string) (ids.ShortID, error) {
 }
 
 // BuildGenesis build the genesis state of the Platform Chain (and thereby the Avalanche network.)
-func (ss *StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, reply *BuildGenesisReply) error {
+func (*StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, reply *BuildGenesisReply) error {
 	// Specify the UTXOs on the Platform chain that exist at genesis.
 	utxos := make([]*genesis.UTXO, 0, len(args.UTXOs))
 	for i, apiUTXO := range args.UTXOs {
@@ -376,7 +378,14 @@ func (s innerSortUTXO) Less(i, j int) bool {
 	return bytes.Compare(iAddrID.Bytes(), jAddrID.Bytes()) == -1
 }
 
-func (s innerSortUTXO) Len() int      { return len(s) }
-func (s innerSortUTXO) Swap(i, j int) { s[j], s[i] = s[i], s[j] }
+func (s innerSortUTXO) Len() int {
+	return len(s)
+}
 
-func sortUTXOs(utxos []UTXO) { sort.Sort(innerSortUTXO(utxos)) }
+func (s innerSortUTXO) Swap(i, j int) {
+	s[j], s[i] = s[i], s[j]
+}
+
+func sortUTXOs(utxos []UTXO) {
+	sort.Sort(innerSortUTXO(utxos))
+}
