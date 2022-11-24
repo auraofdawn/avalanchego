@@ -377,11 +377,8 @@ func verifyAddDelegatorTx(
 	}
 
 	txID := sTx.ID()
-	newStaker, err := state.NewPendingStaker(txID, tx)
-	if err != nil {
-		return nil, err
-	}
 
+	newStaker := state.NewPendingStaker(txID, tx)
 	canDelegate, err := canDelegate(chainState, primaryNetworkValidator, maximumWeight, newStaker)
 	if err != nil {
 		return nil, err
@@ -671,11 +668,7 @@ func verifyAddPermissionlessDelegatorTx(
 	maximumWeight = math.Min(maximumWeight, delegatorRules.maxValidatorStake)
 
 	txID := sTx.ID()
-	newStaker, err := state.NewPendingStaker(txID, tx)
-	if err != nil {
-		return err
-	}
-
+	newStaker := state.NewPendingStaker(txID, tx)
 	canDelegate, err := canDelegate(chainState, validator, maximumWeight, newStaker)
 	if err != nil {
 		return err

@@ -22,6 +22,4 @@ func (out *MintOutput) Verify() error {
 	}
 }
 
-func (out *MintOutput) VerifyState() error {
-	return out.Verify()
-}
+func (out *MintOutput) VerifyState() error { return out.Verify() }

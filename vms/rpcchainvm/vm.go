@@ -4,23 +4,26 @@
 package rpcchainvm
 
 import (
-	"context"
+	"golang.org/x/net/context"
 
 	"google.golang.org/grpc"
 
 	"github.com/hashicorp/go-plugin"
 
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
-	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/rpcchainvm/grpcutils"
 
 	vmpb "github.com/ava-labs/avalanchego/proto/pb/vm"
 )
 
+// protocolVersion should be bumped anytime changes are made which require
+// the plugin vm to upgrade to latest avalanchego release to be compatible.
+const protocolVersion = 18
+
 var (
 	// Handshake is a common handshake that is shared by plugin and host.
 	Handshake = plugin.HandshakeConfig{
-		ProtocolVersion:  version.RPCChainVMProtocol,
+		ProtocolVersion:  protocolVersion,
 		MagicCookieKey:   "VM_PLUGIN",
 		MagicCookieValue: "dynamic",
 	}
@@ -54,7 +57,7 @@ func (p *vmPlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
 }
 
 // GRPCClient returns a new GRPC client
-func (*vmPlugin) GRPCClient(_ context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+func (p *vmPlugin) GRPCClient(ctx context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
 	return NewClient(vmpb.NewVMClient(c)), nil
 }
 

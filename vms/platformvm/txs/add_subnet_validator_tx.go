@@ -10,7 +10,6 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/utils/constants"
-	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
 	"github.com/ava-labs/avalanchego/vms/platformvm/validator"
 )
@@ -31,35 +30,17 @@ type AddSubnetValidatorTx struct {
 	SubnetAuth verify.Verifiable `serialize:"true" json:"subnetAuthorization"`
 }
 
-func (tx *AddSubnetValidatorTx) SubnetID() ids.ID {
-	return tx.Validator.Subnet
-}
+func (tx *AddSubnetValidatorTx) SubnetID() ids.ID     { return tx.Validator.Subnet }
+func (tx *AddSubnetValidatorTx) NodeID() ids.NodeID   { return tx.Validator.NodeID }
+func (tx *AddSubnetValidatorTx) StartTime() time.Time { return tx.Validator.StartTime() }
+func (tx *AddSubnetValidatorTx) EndTime() time.Time   { return tx.Validator.EndTime() }
+func (tx *AddSubnetValidatorTx) Weight() uint64       { return tx.Validator.Wght }
 
-func (tx *AddSubnetValidatorTx) NodeID() ids.NodeID {
-	return tx.Validator.NodeID
-}
-
-func (*AddSubnetValidatorTx) PublicKey() (*bls.PublicKey, bool, error) {
-	return nil, false, nil
-}
-
-func (tx *AddSubnetValidatorTx) StartTime() time.Time {
-	return tx.Validator.StartTime()
-}
-
-func (tx *AddSubnetValidatorTx) EndTime() time.Time {
-	return tx.Validator.EndTime()
-}
-
-func (tx *AddSubnetValidatorTx) Weight() uint64 {
-	return tx.Validator.Wght
-}
-
-func (*AddSubnetValidatorTx) PendingPriority() Priority {
+func (tx *AddSubnetValidatorTx) PendingPriority() Priority {
 	return SubnetPermissionedValidatorPendingPriority
 }
 
-func (*AddSubnetValidatorTx) CurrentPriority() Priority {
+func (tx *AddSubnetValidatorTx) CurrentPriority() Priority {
 	return SubnetPermissionedValidatorCurrentPriority
 }
 

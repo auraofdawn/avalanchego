@@ -4,8 +4,6 @@
 package proposervm
 
 import (
-	"context"
-
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/choices"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
@@ -23,11 +21,11 @@ type postForkBlock struct {
 // 1) Sets this blocks status to Accepted.
 // 2) Persists this block in storage
 // 3) Calls Reject() on siblings of this block and their descendants.
-func (b *postForkBlock) Accept(ctx context.Context) error {
+func (b *postForkBlock) Accept() error {
 	if err := b.acceptOuterBlk(); err != nil {
 		return err
 	}
-	return b.acceptInnerBlk(ctx)
+	return b.acceptInnerBlk()
 }
 
 func (b *postForkBlock) acceptOuterBlk() error {
@@ -46,13 +44,13 @@ func (b *postForkBlock) acceptOuterBlk() error {
 	return b.vm.storePostForkBlock(b)
 }
 
-func (b *postForkBlock) acceptInnerBlk(ctx context.Context) error {
+func (b *postForkBlock) acceptInnerBlk() error {
 	// mark the inner block as accepted and all conflicting inner blocks as
 	// rejected
-	return b.vm.Tree.Accept(ctx, b.innerBlk)
+	return b.vm.Tree.Accept(b.innerBlk)
 }
 
-func (b *postForkBlock) Reject(context.Context) error {
+func (b *postForkBlock) Reject() error {
 	// We do not reject the inner block here because it may be accepted later
 	delete(b.vm.verifiedBlocks, b.ID())
 	b.status = choices.Rejected
@@ -74,16 +72,16 @@ func (b *postForkBlock) Parent() ids.ID {
 
 // If Verify() returns nil, Accept() or Reject() will eventually be called on
 // [b] and [b.innerBlk]
-func (b *postForkBlock) Verify(ctx context.Context) error {
-	parent, err := b.vm.getBlock(ctx, b.ParentID())
+func (b *postForkBlock) Verify() error {
+	parent, err := b.vm.getBlock(b.ParentID())
 	if err != nil {
 		return err
 	}
-	return parent.verifyPostForkChild(ctx, b)
+	return parent.verifyPostForkChild(b)
 }
 
 // Return the two options for the block that follows [b]
-func (b *postForkBlock) Options(ctx context.Context) ([2]snowman.Block, error) {
+func (b *postForkBlock) Options() ([2]snowman.Block, error) {
 	innerOracleBlk, ok := b.innerBlk.(snowman.OracleBlock)
 	if !ok {
 		// [b]'s innerBlk isn't an oracle block
@@ -91,7 +89,7 @@ func (b *postForkBlock) Options(ctx context.Context) ([2]snowman.Block, error) {
 	}
 
 	// The inner block's child options
-	innerOptions, err := innerOracleBlk.Options(ctx)
+	innerOptions, err := innerOracleBlk.Options()
 	if err != nil {
 		return [2]snowman.Block{}, err
 	}
@@ -121,23 +119,22 @@ func (b *postForkBlock) Options(ctx context.Context) ([2]snowman.Block, error) {
 }
 
 // A post-fork block can never have a pre-fork child
-func (*postForkBlock) verifyPreForkChild(context.Context, *preForkBlock) error {
+func (b *postForkBlock) verifyPreForkChild(child *preForkBlock) error {
 	return errUnsignedChild
 }
 
-func (b *postForkBlock) verifyPostForkChild(ctx context.Context, child *postForkBlock) error {
+func (b *postForkBlock) verifyPostForkChild(child *postForkBlock) error {
 	parentTimestamp := b.Timestamp()
 	parentPChainHeight := b.PChainHeight()
 	return b.postForkCommonComponents.Verify(
-		ctx,
 		parentTimestamp,
 		parentPChainHeight,
 		child,
 	)
 }
 
-func (b *postForkBlock) verifyPostForkOption(ctx context.Context, child *postForkOption) error {
-	if err := verifyIsOracleBlock(ctx, b.innerBlk); err != nil {
+func (b *postForkBlock) verifyPostForkOption(child *postForkOption) error {
+	if err := verifyIsOracleBlock(b.innerBlk); err != nil {
 		return err
 	}
 
@@ -148,20 +145,19 @@ func (b *postForkBlock) verifyPostForkOption(ctx context.Context, child *postFor
 		return errInnerParentMismatch
 	}
 
-	return child.vm.verifyAndRecordInnerBlk(ctx, child)
+	return child.vm.verifyAndRecordInnerBlk(child)
 }
 
 // Return the child (a *postForkBlock) of this block
-func (b *postForkBlock) buildChild(ctx context.Context) (Block, error) {
+func (b *postForkBlock) buildChild() (Block, error) {
 	return b.postForkCommonComponents.buildChild(
-		ctx,
 		b.ID(),
 		b.Timestamp(),
 		b.PChainHeight(),
 	)
 }
 
-func (b *postForkBlock) pChainHeight(context.Context) (uint64, error) {
+func (b *postForkBlock) pChainHeight() (uint64, error) {
 	return b.PChainHeight(), nil
 }
 

@@ -69,13 +69,9 @@ func NewInboundConnUpgradeThrottler(log logging.Logger, config InboundConnUpgrad
 // noInboundConnUpgradeThrottler upgrades all inbound connections
 type noInboundConnUpgradeThrottler struct{}
 
-func (*noInboundConnUpgradeThrottler) Dispatch() {}
-
-func (*noInboundConnUpgradeThrottler) Stop() {}
-
-func (*noInboundConnUpgradeThrottler) ShouldUpgrade(ips.IPPort) bool {
-	return true
-}
+func (*noInboundConnUpgradeThrottler) Dispatch()                     {}
+func (*noInboundConnUpgradeThrottler) Stop()                         {}
+func (*noInboundConnUpgradeThrottler) ShouldUpgrade(ips.IPPort) bool { return true }
 
 type ipAndTime struct {
 	ip                string

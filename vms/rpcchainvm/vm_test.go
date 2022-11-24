@@ -181,7 +181,7 @@ func testHTTPPingRequest(target, endpoint string, payload []byte) error {
 	httpClient := new(http.Client)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to dial test server: %w", err)
+		return fmt.Errorf("failed to dial test server: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -331,7 +331,7 @@ func (p *testVMPlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
 	return nil
 }
 
-func (*testVMPlugin) GRPCClient(_ context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+func (p *testVMPlugin) GRPCClient(_ context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
 	return NewTestClient(vmpb.NewVMClient(c)), nil
 }
 
@@ -339,7 +339,7 @@ type TestSubnetVM struct {
 	logger hclog.Logger
 }
 
-func (*TestSubnetVM) CreateHandlers() (map[string]*common.HTTPHandler, error) {
+func (vm *TestSubnetVM) CreateHandlers() (map[string]*common.HTTPHandler, error) {
 	apis := make(map[string]*common.HTTPHandler)
 
 	testEchoMsgCount := 5
@@ -374,7 +374,7 @@ type testResult struct {
 	Result PingReply `json:"result"`
 }
 
-func (*PingService) Ping(_ *http.Request, _ *struct{}, reply *PingReply) (err error) {
+func (p *PingService) Ping(_ *http.Request, _ *struct{}, reply *PingReply) (err error) {
 	reply.Success = true
 	return nil
 }
@@ -384,7 +384,7 @@ func getTestRPCServer() (*gorillarpc.Server, error) {
 	server.RegisterCodec(json.NewCodec(), "application/json")
 	server.RegisterCodec(json.NewCodec(), "application/json;charset=UTF-8")
 	if err := server.RegisterService(&PingService{}, "subnet"); err != nil {
-		return nil, fmt.Errorf("failed to create rpc server %w", err)
+		return nil, fmt.Errorf("failed to create rpc server %v", err)
 	}
 	return server, nil
 }

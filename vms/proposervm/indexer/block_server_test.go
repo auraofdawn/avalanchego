@@ -4,7 +4,6 @@
 package indexer
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -26,13 +25,13 @@ type TestBlockServer struct {
 	CantGetFullPostForkBlock bool
 	CantCommit               bool
 
-	GetFullPostForkBlockF func(ctx context.Context, blkID ids.ID) (snowman.Block, error)
+	GetFullPostForkBlockF func(blkID ids.ID) (snowman.Block, error)
 	CommitF               func() error
 }
 
-func (tsb *TestBlockServer) GetFullPostForkBlock(ctx context.Context, blkID ids.ID) (snowman.Block, error) {
+func (tsb *TestBlockServer) GetFullPostForkBlock(blkID ids.ID) (snowman.Block, error) {
 	if tsb.GetFullPostForkBlockF != nil {
-		return tsb.GetFullPostForkBlockF(ctx, blkID)
+		return tsb.GetFullPostForkBlockF(blkID)
 	}
 	if tsb.CantGetFullPostForkBlock && tsb.T != nil {
 		tsb.T.Fatal(errGetWrappingBlk)

@@ -4,8 +4,6 @@
 package indexer
 
 import (
-	"context"
-
 	"github.com/ava-labs/avalanchego/database/versiondb"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
@@ -18,5 +16,5 @@ type BlockServer interface {
 
 	// Note: this is a contention heavy call that should be avoided
 	// for frequent/repeated indexer ops
-	GetFullPostForkBlock(ctx context.Context, blkID ids.ID) (snowman.Block, error)
+	GetFullPostForkBlock(blkID ids.ID) (snowman.Block, error)
 }

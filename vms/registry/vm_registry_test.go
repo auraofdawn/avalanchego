@@ -4,7 +4,6 @@
 package registry
 
 import (
-	"context"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -47,18 +46,18 @@ func TestReload_Success(t *testing.T) {
 		Times(1).
 		Return(registeredVms, unregisteredVms, nil)
 	resources.mockVMRegisterer.EXPECT().
-		Register(gomock.Any(), id3, factory3).
+		Register(id3, factory3).
 		Times(1).
 		Return(nil)
 	resources.mockVMRegisterer.EXPECT().
-		Register(gomock.Any(), id4, factory4).
+		Register(id4, factory4).
 		Times(1).
 		Return(nil)
 
-	installedVMs, failedVMs, err := resources.vmRegistry.Reload(context.Background())
+	installedVMs, failedVMs, err := resources.vmRegistry.Reload()
 	require.ElementsMatch(t, []ids.ID{id3, id4}, installedVMs)
 	require.Empty(t, failedVMs)
-	require.NoError(t, err)
+	require.Nil(t, err)
 }
 
 // Tests that we fail if we're not able to get the vms on disk
@@ -68,10 +67,10 @@ func TestReload_GetNewVMsFails(t *testing.T) {
 
 	resources.mockVMGetter.EXPECT().Get().Times(1).Return(nil, nil, errOops)
 
-	installedVMs, failedVMs, err := resources.vmRegistry.Reload(context.Background())
-	require.Empty(t, installedVMs)
+	installedVMs, failedVMs, err := resources.vmRegistry.Reload()
+	require.Nil(t, installedVMs)
 	require.Empty(t, failedVMs)
-	require.ErrorIs(t, err, errOops)
+	require.Equal(t, err, errOops)
 }
 
 // Tests that if we fail to register a VM, we fail.
@@ -99,21 +98,21 @@ func TestReload_PartialRegisterFailure(t *testing.T) {
 		Times(1).
 		Return(registeredVms, unregisteredVms, nil)
 	resources.mockVMRegisterer.EXPECT().
-		Register(gomock.Any(), id3, factory3).
+		Register(id3, factory3).
 		Times(1).
 		Return(errOops)
 	resources.mockVMRegisterer.EXPECT().
-		Register(gomock.Any(), id4, factory4).
+		Register(id4, factory4).
 		Times(1).
 		Return(nil)
 
-	installedVMs, failedVMs, err := resources.vmRegistry.Reload(context.Background())
+	installedVMs, failedVMs, err := resources.vmRegistry.Reload()
 
 	require.Len(t, failedVMs, 1)
-	require.ErrorIs(t, failedVMs[id3], errOops)
+	require.Equal(t, failedVMs[id3], errOops)
 	require.Len(t, installedVMs, 1)
-	require.Equal(t, id4, installedVMs[0])
-	require.NoError(t, err)
+	require.Equal(t, installedVMs[0], id4)
+	require.Nil(t, err)
 }
 
 // Tests the happy case where Reload succeeds.
@@ -141,18 +140,18 @@ func TestReloadWithReadLock_Success(t *testing.T) {
 		Times(1).
 		Return(registeredVms, unregisteredVms, nil)
 	resources.mockVMRegisterer.EXPECT().
-		RegisterWithReadLock(gomock.Any(), id3, factory3).
+		RegisterWithReadLock(id3, factory3).
 		Times(1).
 		Return(nil)
 	resources.mockVMRegisterer.EXPECT().
-		RegisterWithReadLock(gomock.Any(), id4, factory4).
+		RegisterWithReadLock(id4, factory4).
 		Times(1).
 		Return(nil)
 
-	installedVMs, failedVMs, err := resources.vmRegistry.ReloadWithReadLock(context.Background())
+	installedVMs, failedVMs, err := resources.vmRegistry.ReloadWithReadLock()
 	require.ElementsMatch(t, []ids.ID{id3, id4}, installedVMs)
 	require.Empty(t, failedVMs)
-	require.NoError(t, err)
+	require.Nil(t, err)
 }
 
 // Tests that we fail if we're not able to get the vms on disk
@@ -162,10 +161,10 @@ func TestReloadWithReadLock_GetNewVMsFails(t *testing.T) {
 
 	resources.mockVMGetter.EXPECT().Get().Times(1).Return(nil, nil, errOops)
 
-	installedVMs, failedVMs, err := resources.vmRegistry.ReloadWithReadLock(context.Background())
-	require.Empty(t, installedVMs)
+	installedVMs, failedVMs, err := resources.vmRegistry.ReloadWithReadLock()
+	require.Nil(t, installedVMs)
 	require.Empty(t, failedVMs)
-	require.ErrorIs(t, err, errOops)
+	require.Equal(t, err, errOops)
 }
 
 // Tests that if we fail to register a VM, we fail.
@@ -193,21 +192,21 @@ func TestReloadWithReadLock_PartialRegisterFailure(t *testing.T) {
 		Times(1).
 		Return(registeredVms, unregisteredVms, nil)
 	resources.mockVMRegisterer.EXPECT().
-		RegisterWithReadLock(gomock.Any(), id3, factory3).
+		RegisterWithReadLock(id3, factory3).
 		Times(1).
 		Return(errOops)
 	resources.mockVMRegisterer.EXPECT().
-		RegisterWithReadLock(gomock.Any(), id4, factory4).
+		RegisterWithReadLock(id4, factory4).
 		Times(1).
 		Return(nil)
 
-	installedVMs, failedVMs, err := resources.vmRegistry.ReloadWithReadLock(context.Background())
+	installedVMs, failedVMs, err := resources.vmRegistry.ReloadWithReadLock()
 
 	require.Len(t, failedVMs, 1)
-	require.ErrorIs(t, failedVMs[id3], errOops)
+	require.Equal(t, failedVMs[id3], errOops)
 	require.Len(t, installedVMs, 1)
-	require.Equal(t, id4, installedVMs[0])
-	require.NoError(t, err)
+	require.Equal(t, installedVMs[0], id4)
+	require.Nil(t, err)
 }
 
 type registryTestResources struct {

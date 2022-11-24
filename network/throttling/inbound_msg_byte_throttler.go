@@ -122,9 +122,7 @@ func (t *inboundMsgByteThrottler) Acquire(ctx context.Context, msgSize uint64, n
 		t.nodeToAtLargeBytesUsed[nodeID] += atLargeBytesUsed
 		if metadata.bytesNeeded == 0 { // If we acquired enough bytes, return
 			t.lock.Unlock()
-			return func() {
-				t.release(metadata, nodeID)
-			}
+			return func() { t.release(metadata, nodeID) }
 		}
 	}
 
@@ -154,9 +152,7 @@ func (t *inboundMsgByteThrottler) Acquire(ctx context.Context, msgSize uint64, n
 		metadata.bytesNeeded -= vdrBytesUsed
 		if metadata.bytesNeeded == 0 { // If we acquired enough bytes, return
 			t.lock.Unlock()
-			return func() {
-				t.release(metadata, nodeID)
-			}
+			return func() { t.release(metadata, nodeID) }
 		}
 	}
 

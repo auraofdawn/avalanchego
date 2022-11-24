@@ -4,7 +4,6 @@
 package avm
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -21,7 +20,7 @@ func BenchmarkLoadUser(b *testing.B) {
 		_, _, vm, _ := GenesisVM(nil)
 		ctx := vm.ctx
 		defer func() {
-			if err := vm.Shutdown(context.Background()); err != nil {
+			if err := vm.Shutdown(); err != nil {
 				b.Fatal(err)
 			}
 			ctx.Lock.Unlock()
@@ -69,7 +68,7 @@ func GetAllUTXOsBenchmark(b *testing.B, utxoCount int) {
 	_, _, vm, _ := GenesisVM(b)
 	ctx := vm.ctx
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			b.Fatal(err)
 		}
 		ctx.Lock.Unlock()

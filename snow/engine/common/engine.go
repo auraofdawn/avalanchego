@@ -21,7 +21,7 @@ type Engine interface {
 	Context() *snow.ConsensusContext
 
 	// Start engine operations from given request ID
-	Start(ctx context.Context, startReqID uint32) error
+	Start(startReqID uint32) error
 
 	// Returns nil if the engine is healthy.
 	// Periodically called and reported through the health API
@@ -536,23 +536,23 @@ type InternalHandler interface {
 	validators.Connector
 
 	// Notify this engine that a registered timeout has fired.
-	Timeout(context.Context) error
+	Timeout() error
 
 	// Gossip to the network a container on the accepted frontier
-	Gossip(context.Context) error
+	Gossip() error
 
 	// Halt this engine.
 	//
 	// This function will be called before the environment starts exiting. This
 	// function is slightly special, in that it does not expect the chain's
 	// context lock to be held before calling this function.
-	Halt(context.Context)
+	Halt()
 
 	// Shutdown this engine.
 	//
 	// This function will be called when the environment is exiting.
-	Shutdown(context.Context) error
+	Shutdown() error
 
 	// Notify this engine of a message from the virtual machine.
-	Notify(context.Context, Message) error
+	Notify(Message) error
 }

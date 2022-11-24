@@ -5,7 +5,6 @@ package queue
 
 import (
 	"bytes"
-	"context"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -25,31 +24,27 @@ const bootstrapProgressCheckpointSize = 55
 
 func testJob(t *testing.T, jobID ids.ID, executed *bool, parentID ids.ID, parentExecuted *bool) *TestJob {
 	return &TestJob{
-		T: t,
-		IDF: func() ids.ID {
-			return jobID
-		},
-		MissingDependenciesF: func(context.Context) (ids.Set, error) {
+		T:   t,
+		IDF: func() ids.ID { return jobID },
+		MissingDependenciesF: func() (ids.Set, error) {
 			if parentID != ids.Empty && !*parentExecuted {
 				return ids.Set{parentID: struct{}{}}, nil
 			}
 			return ids.Set{}, nil
 		},
-		HasMissingDependenciesF: func(context.Context) (bool, error) {
+		HasMissingDependenciesF: func() (bool, error) {
 			if parentID != ids.Empty && !*parentExecuted {
 				return true, nil
 			}
 			return false, nil
 		},
-		ExecuteF: func(context.Context) error {
+		ExecuteF: func() error {
 			if executed != nil {
 				*executed = true
 			}
 			return nil
 		},
-		BytesF: func() []byte {
-			return []byte{0}
-		},
+		BytesF: func() []byte { return []byte{0} },
 	}
 }
 
@@ -95,7 +90,7 @@ func TestPushAndExecute(t *testing.T) {
 	require.NoError(err)
 	require.False(has)
 
-	pushed, err := jobs.Push(context.Background(), job)
+	pushed, err := jobs.Push(job)
 	require.True(pushed)
 	require.NoError(err)
 
@@ -120,12 +115,12 @@ func TestPushAndExecute(t *testing.T) {
 	require.NoError(err)
 	require.True(hasNext)
 
-	parser.ParseF = func(_ context.Context, b []byte) (Job, error) {
+	parser.ParseF = func(b []byte) (Job, error) {
 		require.Equal([]byte{0}, b)
 		return job, nil
 	}
 
-	count, err := jobs.ExecuteAll(context.Background(), snow.DefaultConsensusContextTest(), &common.Halter{}, false)
+	count, err := jobs.ExecuteAll(snow.DefaultConsensusContextTest(), &common.Halter{}, false)
 	require.NoError(err)
 	require.Equal(1, count)
 
@@ -163,11 +158,9 @@ func TestRemoveDependency(t *testing.T) {
 
 	job0 := testJob(t, job0ID, &executed0, ids.Empty, nil)
 	job1 := testJob(t, job1ID, &executed1, job0ID, &executed0)
-	job1.BytesF = func() []byte {
-		return []byte{1}
-	}
+	job1.BytesF = func() []byte { return []byte{1} }
 
-	pushed, err := jobs.Push(context.Background(), job1)
+	pushed, err := jobs.Push(job1)
 	require.True(pushed)
 	require.NoError(err)
 
@@ -175,7 +168,7 @@ func TestRemoveDependency(t *testing.T) {
 	require.NoError(err)
 	require.False(hasNext)
 
-	pushed, err = jobs.Push(context.Background(), job0)
+	pushed, err = jobs.Push(job0)
 	require.True(pushed)
 	require.NoError(err)
 
@@ -183,7 +176,7 @@ func TestRemoveDependency(t *testing.T) {
 	require.NoError(err)
 	require.True(hasNext)
 
-	parser.ParseF = func(_ context.Context, b []byte) (Job, error) {
+	parser.ParseF = func(b []byte) (Job, error) {
 		switch {
 		case bytes.Equal(b, []byte{0}):
 			return job0, nil
@@ -195,7 +188,7 @@ func TestRemoveDependency(t *testing.T) {
 		}
 	}
 
-	count, err := jobs.ExecuteAll(context.Background(), snow.DefaultConsensusContextTest(), &common.Halter{}, false)
+	count, err := jobs.ExecuteAll(snow.DefaultConsensusContextTest(), &common.Halter{}, false)
 	require.NoError(err)
 	require.Equal(2, count)
 	require.True(executed0)
@@ -224,11 +217,11 @@ func TestDuplicatedExecutablePush(t *testing.T) {
 	jobID := ids.GenerateTestID()
 	job := testJob(t, jobID, nil, ids.Empty, nil)
 
-	pushed, err := jobs.Push(context.Background(), job)
+	pushed, err := jobs.Push(job)
 	require.True(pushed)
 	require.NoError(err)
 
-	pushed, err = jobs.Push(context.Background(), job)
+	pushed, err = jobs.Push(job)
 	require.False(pushed)
 	require.NoError(err)
 
@@ -238,7 +231,7 @@ func TestDuplicatedExecutablePush(t *testing.T) {
 	jobs, err = New(db, "", prometheus.NewRegistry())
 	require.NoError(err)
 
-	pushed, err = jobs.Push(context.Background(), job)
+	pushed, err = jobs.Push(job)
 	require.False(pushed)
 	require.NoError(err)
 }
@@ -258,11 +251,11 @@ func TestDuplicatedNotExecutablePush(t *testing.T) {
 	job1ID := ids.GenerateTestID()
 	job1 := testJob(t, job1ID, nil, job0ID, &executed0)
 
-	pushed, err := jobs.Push(context.Background(), job1)
+	pushed, err := jobs.Push(job1)
 	require.True(pushed)
 	require.NoError(err)
 
-	pushed, err = jobs.Push(context.Background(), job1)
+	pushed, err = jobs.Push(job1)
 	require.False(pushed)
 	require.NoError(err)
 
@@ -272,7 +265,7 @@ func TestDuplicatedNotExecutablePush(t *testing.T) {
 	jobs, err = New(db, "", prometheus.NewRegistry())
 	require.NoError(err)
 
-	pushed, err = jobs.Push(context.Background(), job1)
+	pushed, err = jobs.Push(job1)
 	require.False(pushed)
 	require.NoError(err)
 }
@@ -285,7 +278,7 @@ func TestMissingJobs(t *testing.T) {
 
 	jobs, err := NewWithMissing(db, "", prometheus.NewRegistry())
 	require.NoError(err)
-	if err := jobs.SetParser(context.Background(), parser); err != nil {
+	if err := jobs.SetParser(parser); err != nil {
 		t.Fatal(err)
 	}
 
@@ -317,7 +310,7 @@ func TestMissingJobs(t *testing.T) {
 
 	jobs, err = NewWithMissing(db, "", prometheus.NewRegistry())
 	require.NoError(err)
-	if err := jobs.SetParser(context.Background(), parser); err != nil {
+	if err := jobs.SetParser(parser); err != nil {
 		t.Fatal(err)
 	}
 
@@ -341,7 +334,7 @@ func TestHandleJobWithMissingDependencyOnRunnableStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := jobs.SetParser(context.Background(), parser); err != nil {
+	if err := jobs.SetParser(parser); err != nil {
 		t.Fatal(err)
 	}
 
@@ -349,16 +342,10 @@ func TestHandleJobWithMissingDependencyOnRunnableStack(t *testing.T) {
 	job1ID, executed1 := ids.GenerateTestID(), false
 	job0 := testJob(t, job0ID, &executed0, ids.Empty, nil)
 	job1 := testJob(t, job1ID, &executed1, job0ID, &executed0)
+	job1.ExecuteF = func() error { return database.ErrClosed } // job1 fails to execute the first time due to a closed database
+	job1.BytesF = func() []byte { return []byte{1} }
 
-	// job1 fails to execute the first time due to a closed database
-	job1.ExecuteF = func(context.Context) error {
-		return database.ErrClosed
-	}
-	job1.BytesF = func() []byte {
-		return []byte{1}
-	}
-
-	pushed, err := jobs.Push(context.Background(), job1)
+	pushed, err := jobs.Push(job1)
 	require.True(pushed)
 	require.NoError(err)
 
@@ -366,7 +353,7 @@ func TestHandleJobWithMissingDependencyOnRunnableStack(t *testing.T) {
 	require.NoError(err)
 	require.False(hasNext)
 
-	pushed, err = jobs.Push(context.Background(), job0)
+	pushed, err = jobs.Push(job0)
 	require.True(pushed)
 	require.NoError(err)
 
@@ -374,7 +361,7 @@ func TestHandleJobWithMissingDependencyOnRunnableStack(t *testing.T) {
 	require.NoError(err)
 	require.True(hasNext)
 
-	parser.ParseF = func(_ context.Context, b []byte) (Job, error) {
+	parser.ParseF = func(b []byte) (Job, error) {
 		switch {
 		case bytes.Equal(b, []byte{0}):
 			return job0, nil
@@ -386,7 +373,7 @@ func TestHandleJobWithMissingDependencyOnRunnableStack(t *testing.T) {
 		}
 	}
 
-	_, err = jobs.ExecuteAll(context.Background(), snow.DefaultConsensusContextTest(), &common.Halter{}, false)
+	_, err = jobs.ExecuteAll(snow.DefaultConsensusContextTest(), &common.Halter{}, false)
 	// Assert that the database closed error on job1 causes ExecuteAll
 	// to fail in the middle of execution.
 	require.Error(err)
@@ -394,10 +381,7 @@ func TestHandleJobWithMissingDependencyOnRunnableStack(t *testing.T) {
 	require.False(executed1)
 
 	executed0 = false
-	job1.ExecuteF = func(context.Context) error {
-		executed1 = true // job1 succeeds the second time
-		return nil
-	}
+	job1.ExecuteF = func() error { executed1 = true; return nil } // job1 succeeds the second time
 
 	// Create jobs queue from the same database and ensure that the jobs queue
 	// recovers correctly.
@@ -405,7 +389,7 @@ func TestHandleJobWithMissingDependencyOnRunnableStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := jobs.SetParser(context.Background(), parser); err != nil {
+	if err := jobs.SetParser(parser); err != nil {
 		t.Fatal(err)
 	}
 
@@ -414,7 +398,7 @@ func TestHandleJobWithMissingDependencyOnRunnableStack(t *testing.T) {
 
 	require.Equal(missingIDs[0], job0.ID())
 
-	pushed, err = jobs.Push(context.Background(), job0)
+	pushed, err = jobs.Push(job0)
 	require.NoError(err)
 	require.True(pushed)
 
@@ -422,7 +406,7 @@ func TestHandleJobWithMissingDependencyOnRunnableStack(t *testing.T) {
 	require.NoError(err)
 	require.True(hasNext)
 
-	count, err := jobs.ExecuteAll(context.Background(), snow.DefaultConsensusContextTest(), &common.Halter{}, false)
+	count, err := jobs.ExecuteAll(snow.DefaultConsensusContextTest(), &common.Halter{}, false)
 	require.NoError(err)
 	require.Equal(2, count)
 	require.True(executed1)
@@ -438,7 +422,7 @@ func TestInitializeNumJobs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := jobs.SetParser(context.Background(), parser); err != nil {
+	if err := jobs.SetParser(parser); err != nil {
 		t.Fatal(err)
 	}
 
@@ -448,42 +432,26 @@ func TestInitializeNumJobs(t *testing.T) {
 	job0 := &TestJob{
 		T: t,
 
-		IDF: func() ids.ID {
-			return job0ID
-		},
-		MissingDependenciesF: func(context.Context) (ids.Set, error) {
-			return nil, nil
-		},
-		HasMissingDependenciesF: func(context.Context) (bool, error) {
-			return false, nil
-		},
-		BytesF: func() []byte {
-			return []byte{0}
-		},
+		IDF:                     func() ids.ID { return job0ID },
+		MissingDependenciesF:    func() (ids.Set, error) { return nil, nil },
+		HasMissingDependenciesF: func() (bool, error) { return false, nil },
+		BytesF:                  func() []byte { return []byte{0} },
 	}
 	job1 := &TestJob{
 		T: t,
 
-		IDF: func() ids.ID {
-			return job1ID
-		},
-		MissingDependenciesF: func(context.Context) (ids.Set, error) {
-			return nil, nil
-		},
-		HasMissingDependenciesF: func(context.Context) (bool, error) {
-			return false, nil
-		},
-		BytesF: func() []byte {
-			return []byte{1}
-		},
+		IDF:                     func() ids.ID { return job1ID },
+		MissingDependenciesF:    func() (ids.Set, error) { return nil, nil },
+		HasMissingDependenciesF: func() (bool, error) { return false, nil },
+		BytesF:                  func() []byte { return []byte{1} },
 	}
 
-	pushed, err := jobs.Push(context.Background(), job0)
+	pushed, err := jobs.Push(job0)
 	require.True(pushed)
 	require.NoError(err)
 	require.EqualValues(1, jobs.state.numJobs)
 
-	pushed, err = jobs.Push(context.Background(), job1)
+	pushed, err = jobs.Push(job1)
 	require.True(pushed)
 	require.NoError(err)
 	require.EqualValues(2, jobs.state.numJobs)
@@ -514,26 +482,24 @@ func TestClearAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := jobs.SetParser(context.Background(), parser); err != nil {
+	if err := jobs.SetParser(parser); err != nil {
 		t.Fatal(err)
 	}
 	job0ID, executed0 := ids.GenerateTestID(), false
 	job1ID, executed1 := ids.GenerateTestID(), false
 	job0 := testJob(t, job0ID, &executed0, ids.Empty, nil)
 	job1 := testJob(t, job1ID, &executed1, job0ID, &executed0)
-	job1.BytesF = func() []byte {
-		return []byte{1}
-	}
+	job1.BytesF = func() []byte { return []byte{1} }
 
-	pushed, err := jobs.Push(context.Background(), job0)
+	pushed, err := jobs.Push(job0)
 	require.NoError(err)
 	require.True(pushed)
 
-	pushed, err = jobs.Push(context.Background(), job1)
+	pushed, err = jobs.Push(job1)
 	require.True(pushed)
 	require.NoError(err)
 
-	parser.ParseF = func(_ context.Context, b []byte) (Job, error) {
+	parser.ParseF = func(b []byte) (Job, error) {
 		switch {
 		case bytes.Equal(b, []byte{0}):
 			return job0, nil

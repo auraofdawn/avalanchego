@@ -11,9 +11,7 @@ var _ error = (*aggregate)(nil)
 
 type Errs struct{ Err error }
 
-func (errs *Errs) Errored() bool {
-	return errs.Err != nil
-}
+func (errs *Errs) Errored() bool { return errs.Err != nil }
 
 func (errs *Errs) Add(errors ...error) {
 	if errs.Err == nil {

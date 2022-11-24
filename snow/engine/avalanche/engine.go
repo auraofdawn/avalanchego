@@ -4,8 +4,6 @@
 package avalanche
 
 import (
-	"context"
-
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/consensus/avalanche"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
@@ -17,5 +15,5 @@ type Engine interface {
 
 	// GetVtx returns a vertex by its ID.
 	// Returns an error if unknown.
-	GetVtx(ctx context.Context, vtxID ids.ID) (avalanche.Vertex, error)
+	GetVtx(vtxID ids.ID) (avalanche.Vertex, error)
 }

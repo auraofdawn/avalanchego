@@ -142,13 +142,8 @@ func NewMempool(
 	}, nil
 }
 
-func (m *mempool) EnableAdding() {
-	m.dropIncoming = false
-}
-
-func (m *mempool) DisableAdding() {
-	m.dropIncoming = true
-}
+func (m *mempool) EnableAdding()  { m.dropIncoming = false }
+func (m *mempool) DisableAdding() { m.dropIncoming = true }
 
 func (m *mempool) Add(tx *txs.Tx) error {
 	if m.dropIncoming {
@@ -246,9 +241,7 @@ func (m *mempool) addStakerTx(tx *txs.Tx) {
 	m.register(tx)
 }
 
-func (m *mempool) HasStakerTx() bool {
-	return m.unissuedStakerTxs.Len() > 0
-}
+func (m *mempool) HasStakerTx() bool { return m.unissuedStakerTxs.Len() > 0 }
 
 func (m *mempool) removeDecisionTxs(txs []*txs.Tx) {
 	for _, tx := range txs {

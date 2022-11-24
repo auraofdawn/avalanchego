@@ -278,6 +278,4 @@ type ringItem struct {
 	value Hashable
 }
 
-func (r ringItem) Less(than btree.Item) bool {
-	return r.hash < than.(ringItem).hash
-}
+func (r ringItem) Less(than btree.Item) bool { return r.hash < than.(ringItem).hash }

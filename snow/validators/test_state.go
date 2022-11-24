@@ -4,7 +4,6 @@
 package validators
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -26,14 +25,14 @@ type TestState struct {
 	CantGetCurrentHeight,
 	CantGetValidatorSet bool
 
-	GetMinimumHeightF func(context.Context) (uint64, error)
-	GetCurrentHeightF func(context.Context) (uint64, error)
-	GetValidatorSetF  func(ctx context.Context, height uint64, subnetID ids.ID) (map[ids.NodeID]uint64, error)
+	GetMinimumHeightF func() (uint64, error)
+	GetCurrentHeightF func() (uint64, error)
+	GetValidatorSetF  func(height uint64, subnetID ids.ID) (map[ids.NodeID]uint64, error)
 }
 
-func (vm *TestState) GetMinimumHeight(ctx context.Context) (uint64, error) {
+func (vm *TestState) GetMinimumHeight() (uint64, error) {
 	if vm.GetMinimumHeightF != nil {
-		return vm.GetMinimumHeightF(ctx)
+		return vm.GetMinimumHeightF()
 	}
 	if vm.CantGetMinimumHeight && vm.T != nil {
 		vm.T.Fatal(errMinimumHeight)
@@ -41,9 +40,9 @@ func (vm *TestState) GetMinimumHeight(ctx context.Context) (uint64, error) {
 	return 0, errMinimumHeight
 }
 
-func (vm *TestState) GetCurrentHeight(ctx context.Context) (uint64, error) {
+func (vm *TestState) GetCurrentHeight() (uint64, error) {
 	if vm.GetCurrentHeightF != nil {
-		return vm.GetCurrentHeightF(ctx)
+		return vm.GetCurrentHeightF()
 	}
 	if vm.CantGetCurrentHeight && vm.T != nil {
 		vm.T.Fatal(errCurrentHeight)
@@ -51,9 +50,9 @@ func (vm *TestState) GetCurrentHeight(ctx context.Context) (uint64, error) {
 	return 0, errCurrentHeight
 }
 
-func (vm *TestState) GetValidatorSet(ctx context.Context, height uint64, subnetID ids.ID) (map[ids.NodeID]uint64, error) {
+func (vm *TestState) GetValidatorSet(height uint64, subnetID ids.ID) (map[ids.NodeID]uint64, error) {
 	if vm.GetValidatorSetF != nil {
-		return vm.GetValidatorSetF(ctx, height, subnetID)
+		return vm.GetValidatorSetF(height, subnetID)
 	}
 	if vm.CantGetValidatorSet && vm.T != nil {
 		vm.T.Fatal(errGetValidatorSet)

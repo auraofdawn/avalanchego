@@ -22,9 +22,7 @@ type Asset struct {
 }
 
 // AssetID returns the ID of the contained asset
-func (asset *Asset) AssetID() ids.ID {
-	return asset.ID
-}
+func (asset *Asset) AssetID() ids.ID { return asset.ID }
 
 func (asset *Asset) Verify() error {
 	switch {

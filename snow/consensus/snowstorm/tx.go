@@ -4,8 +4,6 @@
 package snowstorm
 
 import (
-	"context"
-
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/choices"
 )
@@ -19,7 +17,7 @@ type Whitelister interface {
 	// Whitelist returns the set of transaction IDs that are explicitly
 	// whitelisted. Transactions that are not explicitly whitelisted are
 	// considered conflicting.
-	Whitelist(context.Context) (ids.Set, error)
+	Whitelist() (ids.Set, error)
 }
 
 // Tx consumes state.
@@ -48,7 +46,7 @@ type Tx interface {
 	//
 	// It is guaranteed that when Verify is called, all the dependencies of
 	// this transaction have already been successfully verified.
-	Verify(context.Context) error
+	Verify() error
 
 	// Bytes returns the binary representation of this transaction.
 	//

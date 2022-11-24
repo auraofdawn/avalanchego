@@ -8,48 +8,48 @@ import (
 )
 
 func TestBinarySnowflake(t *testing.T) {
-	blue := 0
-	red := 1
+	Blue := 0
+	Red := 1
 
 	beta := 2
 
 	sf := binarySnowflake{}
-	sf.Initialize(beta, red)
+	sf.Initialize(beta, Red)
 
-	if pref := sf.Preference(); pref != red {
-		t.Fatalf("Wrong preference. Expected %d got %d", red, pref)
+	if pref := sf.Preference(); pref != Red {
+		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
 	} else if sf.Finalized() {
 		t.Fatalf("Finalized too early")
 	}
 
-	sf.RecordSuccessfulPoll(blue)
+	sf.RecordSuccessfulPoll(Blue)
 
-	if pref := sf.Preference(); pref != blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", blue, pref)
+	if pref := sf.Preference(); pref != Blue {
+		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
 	} else if sf.Finalized() {
 		t.Fatalf("Finalized too early")
 	}
 
-	sf.RecordSuccessfulPoll(red)
+	sf.RecordSuccessfulPoll(Red)
 
-	if pref := sf.Preference(); pref != red {
-		t.Fatalf("Wrong preference. Expected %d got %d", red, pref)
+	if pref := sf.Preference(); pref != Red {
+		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
 	} else if sf.Finalized() {
 		t.Fatalf("Finalized too early")
 	}
 
-	sf.RecordSuccessfulPoll(blue)
+	sf.RecordSuccessfulPoll(Blue)
 
-	if pref := sf.Preference(); pref != blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", blue, pref)
+	if pref := sf.Preference(); pref != Blue {
+		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
 	} else if sf.Finalized() {
 		t.Fatalf("Finalized too early")
 	}
 
-	sf.RecordSuccessfulPoll(blue)
+	sf.RecordSuccessfulPoll(Blue)
 
-	if pref := sf.Preference(); pref != blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", blue, pref)
+	if pref := sf.Preference(); pref != Blue {
+		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
 	} else if !sf.Finalized() {
 		t.Fatalf("Didn't finalized correctly")
 	}

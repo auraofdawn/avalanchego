@@ -4,7 +4,6 @@
 package health
 
 import (
-	"context"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -22,7 +21,7 @@ type Health interface {
 	Registerer
 	Reporter
 
-	Start(ctx context.Context, freq time.Duration)
+	Start(freq time.Duration)
 	Stop()
 }
 
@@ -109,10 +108,10 @@ func (h *health) Liveness() (map[string]Result, bool) {
 	return results, healthy
 }
 
-func (h *health) Start(ctx context.Context, freq time.Duration) {
-	h.readiness.Start(ctx, freq)
-	h.health.Start(ctx, freq)
-	h.liveness.Start(ctx, freq)
+func (h *health) Start(freq time.Duration) {
+	h.readiness.Start(freq)
+	h.health.Start(freq)
+	h.liveness.Start(freq)
 }
 
 func (h *health) Stop() {

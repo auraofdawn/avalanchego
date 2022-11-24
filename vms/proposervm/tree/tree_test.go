@@ -4,7 +4,6 @@
 package tree
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -43,7 +42,7 @@ func TestAcceptSingleBlock(t *testing.T) {
 	_, contains = tr.Get(block)
 	require.True(contains)
 
-	err := tr.Accept(context.Background(), block)
+	err := tr.Accept(block)
 	require.NoError(err)
 	require.Equal(choices.Accepted, block.Status())
 }
@@ -78,7 +77,7 @@ func TestAcceptBlockConflict(t *testing.T) {
 	_, contains = tr.Get(blockToReject)
 	require.True(contains)
 
-	err := tr.Accept(context.Background(), blockToAccept)
+	err := tr.Accept(blockToAccept)
 	require.NoError(err)
 	require.Equal(choices.Accepted, blockToAccept.Status())
 	require.Equal(choices.Rejected, blockToReject.Status())
@@ -126,7 +125,7 @@ func TestAcceptChainConflict(t *testing.T) {
 	_, contains = tr.Get(blockToRejectChild)
 	require.True(contains)
 
-	err := tr.Accept(context.Background(), blockToAccept)
+	err := tr.Accept(blockToAccept)
 	require.NoError(err)
 	require.Equal(choices.Accepted, blockToAccept.Status())
 	require.Equal(choices.Rejected, blockToReject.Status())

@@ -4,7 +4,6 @@
 package proposervm
 
 import (
-	"context"
 	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
@@ -29,11 +28,11 @@ func (b *postForkOption) Timestamp() time.Time {
 	return b.timestamp
 }
 
-func (b *postForkOption) Accept(ctx context.Context) error {
+func (b *postForkOption) Accept() error {
 	if err := b.acceptOuterBlk(); err != nil {
 		return err
 	}
-	return b.acceptInnerBlk(ctx)
+	return b.acceptInnerBlk()
 }
 
 func (b *postForkOption) acceptOuterBlk() error {
@@ -51,13 +50,13 @@ func (b *postForkOption) acceptOuterBlk() error {
 	return b.vm.storePostForkBlock(b)
 }
 
-func (b *postForkOption) acceptInnerBlk(ctx context.Context) error {
+func (b *postForkOption) acceptInnerBlk() error {
 	// mark the inner block as accepted and all conflicting inner blocks as
 	// rejected
-	return b.vm.Tree.Accept(ctx, b.innerBlk)
+	return b.vm.Tree.Accept(b.innerBlk)
 }
 
-func (b *postForkOption) Reject(context.Context) error {
+func (b *postForkOption) Reject() error {
 	// we do not reject the inner block here because that block may be contained
 	// in the proposer block that causing this block to be rejected.
 
@@ -79,46 +78,44 @@ func (b *postForkOption) Parent() ids.ID {
 
 // If Verify returns nil, Accept or Reject is eventually called on [b] and
 // [b.innerBlk].
-func (b *postForkOption) Verify(ctx context.Context) error {
-	parent, err := b.vm.getBlock(ctx, b.ParentID())
+func (b *postForkOption) Verify() error {
+	parent, err := b.vm.getBlock(b.ParentID())
 	if err != nil {
 		return err
 	}
 	b.timestamp = parent.Timestamp()
-	return parent.verifyPostForkOption(ctx, b)
+	return parent.verifyPostForkOption(b)
 }
 
-func (*postForkOption) verifyPreForkChild(context.Context, *preForkBlock) error {
+func (b *postForkOption) verifyPreForkChild(child *preForkBlock) error {
 	// A *preForkBlock's parent must be a *preForkBlock
 	return errUnsignedChild
 }
 
-func (b *postForkOption) verifyPostForkChild(ctx context.Context, child *postForkBlock) error {
+func (b *postForkOption) verifyPostForkChild(child *postForkBlock) error {
 	parentTimestamp := b.Timestamp()
-	parentPChainHeight, err := b.pChainHeight(ctx)
+	parentPChainHeight, err := b.pChainHeight()
 	if err != nil {
 		return err
 	}
 	return b.postForkCommonComponents.Verify(
-		ctx,
 		parentTimestamp,
 		parentPChainHeight,
 		child,
 	)
 }
 
-func (*postForkOption) verifyPostForkOption(context.Context, *postForkOption) error {
+func (b *postForkOption) verifyPostForkOption(child *postForkOption) error {
 	// A *postForkOption's parent can't be a *postForkOption
 	return errUnexpectedBlockType
 }
 
-func (b *postForkOption) buildChild(ctx context.Context) (Block, error) {
-	parentPChainHeight, err := b.pChainHeight(ctx)
+func (b *postForkOption) buildChild() (Block, error) {
+	parentPChainHeight, err := b.pChainHeight()
 	if err != nil {
 		return nil, err
 	}
 	return b.postForkCommonComponents.buildChild(
-		ctx,
 		b.ID(),
 		b.Timestamp(),
 		parentPChainHeight,
@@ -126,12 +123,12 @@ func (b *postForkOption) buildChild(ctx context.Context) (Block, error) {
 }
 
 // This block's P-Chain height is its parent's P-Chain height
-func (b *postForkOption) pChainHeight(ctx context.Context) (uint64, error) {
-	parent, err := b.vm.getBlock(ctx, b.ParentID())
+func (b *postForkOption) pChainHeight() (uint64, error) {
+	parent, err := b.vm.getBlock(b.ParentID())
 	if err != nil {
 		return 0, err
 	}
-	return parent.pChainHeight(ctx)
+	return parent.pChainHeight()
 }
 
 func (b *postForkOption) setStatus(status choices.Status) {

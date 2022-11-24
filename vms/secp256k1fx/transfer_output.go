@@ -36,9 +36,7 @@ func (out *TransferOutput) MarshalJSON() ([]byte, error) {
 }
 
 // Amount returns the quantity of the asset this output consumes
-func (out *TransferOutput) Amount() uint64 {
-	return out.Amt
-}
+func (out *TransferOutput) Amount() uint64 { return out.Amt }
 
 func (out *TransferOutput) Verify() error {
 	switch {
@@ -51,10 +49,6 @@ func (out *TransferOutput) Verify() error {
 	}
 }
 
-func (out *TransferOutput) VerifyState() error {
-	return out.Verify()
-}
+func (out *TransferOutput) VerifyState() error { return out.Verify() }
 
-func (out *TransferOutput) Owners() interface{} {
-	return &out.OutputOwners
-}
+func (out *TransferOutput) Owners() interface{} { return &out.OutputOwners }

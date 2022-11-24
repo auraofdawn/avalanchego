@@ -4,7 +4,6 @@
 package avm
 
 import (
-	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -45,7 +44,7 @@ func TestIndexTransaction_Ordered(t *testing.T) {
 	avaxID := genesisTx.ID()
 	vm := setupTestVM(t, ctx, baseDBManager, genesisBytes, issuer, indexEnabledAvmConfig)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -95,7 +94,7 @@ func TestIndexTransaction_Ordered(t *testing.T) {
 		ctx.Lock.Lock()
 
 		// get pending transactions
-		txs := vm.PendingTxs(context.Background())
+		txs := vm.PendingTxs()
 		if len(txs) != 1 {
 			t.Fatalf("Should have returned %d tx(s)", 1)
 		}
@@ -139,7 +138,7 @@ func TestIndexTransaction_MultipleTransactions(t *testing.T) {
 	avaxID := genesisTx.ID()
 	vm := setupTestVM(t, ctx, baseDBManager, genesisBytes, issuer, indexEnabledAvmConfig)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -187,7 +186,7 @@ func TestIndexTransaction_MultipleTransactions(t *testing.T) {
 		ctx.Lock.Lock()
 
 		// get pending transactions
-		txs := vm.PendingTxs(context.Background())
+		txs := vm.PendingTxs()
 		if len(txs) != 1 {
 			t.Fatalf("Should have returned %d tx(s)", 1)
 		}
@@ -231,7 +230,7 @@ func TestIndexTransaction_MultipleAddresses(t *testing.T) {
 	avaxID := genesisTx.ID()
 	vm := setupTestVM(t, ctx, baseDBManager, genesisBytes, issuer, indexEnabledAvmConfig)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -296,7 +295,7 @@ func TestIndexTransaction_UnorderedWrites(t *testing.T) {
 	avaxID := genesisTx.ID()
 	vm := setupTestVM(t, ctx, baseDBManager, genesisBytes, issuer, indexEnabledAvmConfig)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -344,7 +343,7 @@ func TestIndexTransaction_UnorderedWrites(t *testing.T) {
 		ctx.Lock.Lock()
 
 		// get pending transactions
-		txs := vm.PendingTxs(context.Background())
+		txs := vm.PendingTxs()
 		if len(txs) != 1 {
 			t.Fatalf("Should have returned %d tx(s)", 1)
 		}
@@ -383,7 +382,7 @@ func TestIndexer_Read(t *testing.T) {
 	_, vm, _, _, _ := setup(t, true)
 
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -522,9 +521,7 @@ func setupTestVM(t *testing.T, ctx *snow.Context, baseDBManager manager.Manager,
 	avmConfigBytes, err := json.Marshal(config)
 	require.NoError(t, err)
 	appSender := &common.SenderTest{T: t}
-
-	err = vm.Initialize(
-		context.Background(),
+	if err := vm.Initialize(
 		ctx,
 		baseDBManager.NewPrefixDBManager([]byte{1}),
 		genesisBytes,
@@ -536,18 +533,16 @@ func setupTestVM(t *testing.T, ctx *snow.Context, baseDBManager manager.Manager,
 			Fx: &secp256k1fx.Fx{},
 		}},
 		appSender,
-	)
-	if err != nil {
+	); err != nil {
 		t.Fatal(err)
 	}
-
 	vm.batchTimeout = 0
 
-	if err := vm.SetState(context.Background(), snow.Bootstrapping); err != nil {
+	if err := vm.SetState(snow.Bootstrapping); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := vm.SetState(context.Background(), snow.NormalOp); err != nil {
+	if err := vm.SetState(snow.NormalOp); err != nil {
 		t.Fatal(err)
 	}
 	return vm

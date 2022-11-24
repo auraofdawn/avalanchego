@@ -5,7 +5,6 @@ package avm
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -191,7 +190,7 @@ func verifyTxFeeDeducted(t *testing.T, s *Service, fromAddrs []ids.ShortID, numT
 func TestServiceIssueTx(t *testing.T) {
 	genesisBytes, vm, s, _, _ := setup(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -221,7 +220,7 @@ func TestServiceIssueTx(t *testing.T) {
 func TestServiceGetTxStatus(t *testing.T) {
 	genesisBytes, vm, s, _, _ := setup(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -274,7 +273,7 @@ func TestServiceGetTxStatus(t *testing.T) {
 func TestServiceGetBalanceStrict(t *testing.T) {
 	_, vm, s, _, _ := setup(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -431,7 +430,7 @@ func TestServiceGetTxs(t *testing.T) {
 	vm.addressTxsIndexer, err = index.NewIndexer(vm.db, vm.ctx.Log, "", prometheus.NewRegistry(), false)
 	require.NoError(t, err)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -471,7 +470,7 @@ func TestServiceGetTxs(t *testing.T) {
 func TestServiceGetAllBalances(t *testing.T) {
 	_, vm, s, _, _ := setup(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -664,7 +663,7 @@ func TestServiceGetAllBalances(t *testing.T) {
 func TestServiceGetTx(t *testing.T) {
 	_, vm, s, _, genesisTx := setup(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -691,7 +690,7 @@ func TestServiceGetTxJSON_BaseTx(t *testing.T) {
 	genesisBytes, vm, s, issuer := setupWithIssuer(t, true)
 	ctx := vm.ctx
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -714,8 +713,7 @@ func TestServiceGetTxJSON_BaseTx(t *testing.T) {
 	}
 	ctx.Lock.Lock()
 
-	txs := vm.PendingTxs(context.Background())
-	if len(txs) != 1 {
+	if txs := vm.PendingTxs(); len(txs) != 1 {
 		t.Fatalf("Should have returned %d tx(s)", 1)
 	}
 
@@ -740,7 +738,7 @@ func TestServiceGetTxJSON_ExportTx(t *testing.T) {
 	genesisBytes, vm, s, issuer := setupWithIssuer(t, true)
 	ctx := vm.ctx
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -763,8 +761,7 @@ func TestServiceGetTxJSON_ExportTx(t *testing.T) {
 	}
 	ctx.Lock.Lock()
 
-	txs := vm.PendingTxs(context.Background())
-	if len(txs) != 1 {
+	if txs := vm.PendingTxs(); len(txs) != 1 {
 		t.Fatalf("Should have returned %d tx(s)", 1)
 	}
 
@@ -789,7 +786,7 @@ func TestServiceGetTxJSON_CreateAssetTx(t *testing.T) {
 	ctx := NewContext(t)
 	ctx.Lock.Lock()
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -798,7 +795,6 @@ func TestServiceGetTxJSON_CreateAssetTx(t *testing.T) {
 	genesisBytes := BuildGenesisTest(t)
 	issuer := make(chan common.Message, 1)
 	err := vm.Initialize(
-		context.Background(),
 		ctx,
 		manager.NewMemDB(version.Semantic1_0_0),
 		genesisBytes,
@@ -826,12 +822,12 @@ func TestServiceGetTxJSON_CreateAssetTx(t *testing.T) {
 	}
 	vm.batchTimeout = 0
 
-	err = vm.SetState(context.Background(), snow.Bootstrapping)
+	err = vm.SetState(snow.Bootstrapping)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = vm.SetState(context.Background(), snow.NormalOp)
+	err = vm.SetState(snow.NormalOp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -853,8 +849,7 @@ func TestServiceGetTxJSON_CreateAssetTx(t *testing.T) {
 	}
 	ctx.Lock.Lock()
 
-	txs := vm.PendingTxs(context.Background())
-	if len(txs) != 1 {
+	if txs := vm.PendingTxs(); len(txs) != 1 {
 		t.Fatalf("Should have returned %d tx(s)", 1)
 	}
 
@@ -881,7 +876,7 @@ func TestServiceGetTxJSON_OperationTxWithNftxMintOp(t *testing.T) {
 	ctx := NewContext(t)
 	ctx.Lock.Lock()
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -890,7 +885,6 @@ func TestServiceGetTxJSON_OperationTxWithNftxMintOp(t *testing.T) {
 	genesisBytes := BuildGenesisTest(t)
 	issuer := make(chan common.Message, 1)
 	err := vm.Initialize(
-		context.Background(),
 		ctx,
 		manager.NewMemDB(version.Semantic1_0_0),
 		genesisBytes,
@@ -918,12 +912,12 @@ func TestServiceGetTxJSON_OperationTxWithNftxMintOp(t *testing.T) {
 	}
 	vm.batchTimeout = 0
 
-	err = vm.SetState(context.Background(), snow.Bootstrapping)
+	err = vm.SetState(snow.Bootstrapping)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = vm.SetState(context.Background(), snow.NormalOp)
+	err = vm.SetState(snow.NormalOp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -956,9 +950,8 @@ func TestServiceGetTxJSON_OperationTxWithNftxMintOp(t *testing.T) {
 	}
 	ctx.Lock.Lock()
 
-	txs := vm.PendingTxs(context.Background())
-	if len(txs) != 2 {
-		t.Fatalf("Should have returned %d tx(s)", 2)
+	if txs := vm.PendingTxs(); len(txs) != 2 {
+		t.Fatalf("Should have returned %d tx(s)", 1)
 	}
 
 	reply := api.GetTxReply{}
@@ -988,7 +981,7 @@ func TestServiceGetTxJSON_OperationTxWithMultipleNftxMintOp(t *testing.T) {
 	ctx := NewContext(t)
 	ctx.Lock.Lock()
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -997,7 +990,6 @@ func TestServiceGetTxJSON_OperationTxWithMultipleNftxMintOp(t *testing.T) {
 	genesisBytes := BuildGenesisTest(t)
 	issuer := make(chan common.Message, 1)
 	err := vm.Initialize(
-		context.Background(),
 		ctx,
 		manager.NewMemDB(version.Semantic1_0_0),
 		genesisBytes,
@@ -1025,12 +1017,12 @@ func TestServiceGetTxJSON_OperationTxWithMultipleNftxMintOp(t *testing.T) {
 	}
 	vm.batchTimeout = 0
 
-	err = vm.SetState(context.Background(), snow.Bootstrapping)
+	err = vm.SetState(snow.Bootstrapping)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = vm.SetState(context.Background(), snow.NormalOp)
+	err = vm.SetState(snow.NormalOp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1066,9 +1058,8 @@ func TestServiceGetTxJSON_OperationTxWithMultipleNftxMintOp(t *testing.T) {
 	}
 	ctx.Lock.Lock()
 
-	txs := vm.PendingTxs(context.Background())
-	if len(txs) != 2 {
-		t.Fatalf("Should have returned %d tx(s)", 2)
+	if txs := vm.PendingTxs(); len(txs) != 2 {
+		t.Fatalf("Should have returned %d tx(s)", 1)
 	}
 
 	reply := api.GetTxReply{}
@@ -1097,7 +1088,7 @@ func TestServiceGetTxJSON_OperationTxWithSecpMintOp(t *testing.T) {
 	ctx := NewContext(t)
 	ctx.Lock.Lock()
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -1106,7 +1097,6 @@ func TestServiceGetTxJSON_OperationTxWithSecpMintOp(t *testing.T) {
 	genesisBytes := BuildGenesisTest(t)
 	issuer := make(chan common.Message, 1)
 	err := vm.Initialize(
-		context.Background(),
 		ctx,
 		manager.NewMemDB(version.Semantic1_0_0),
 		genesisBytes,
@@ -1134,12 +1124,12 @@ func TestServiceGetTxJSON_OperationTxWithSecpMintOp(t *testing.T) {
 	}
 	vm.batchTimeout = 0
 
-	err = vm.SetState(context.Background(), snow.Bootstrapping)
+	err = vm.SetState(snow.Bootstrapping)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = vm.SetState(context.Background(), snow.NormalOp)
+	err = vm.SetState(snow.NormalOp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1172,9 +1162,8 @@ func TestServiceGetTxJSON_OperationTxWithSecpMintOp(t *testing.T) {
 	}
 	ctx.Lock.Lock()
 
-	txs := vm.PendingTxs(context.Background())
-	if len(txs) != 2 {
-		t.Fatalf("Should have returned %d tx(s)", 2)
+	if txs := vm.PendingTxs(); len(txs) != 2 {
+		t.Fatalf("Should have returned %d tx(s)", 1)
 	}
 
 	reply := api.GetTxReply{}
@@ -1206,7 +1195,7 @@ func TestServiceGetTxJSON_OperationTxWithMultipleSecpMintOp(t *testing.T) {
 	ctx := NewContext(t)
 	ctx.Lock.Lock()
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -1215,7 +1204,6 @@ func TestServiceGetTxJSON_OperationTxWithMultipleSecpMintOp(t *testing.T) {
 	genesisBytes := BuildGenesisTest(t)
 	issuer := make(chan common.Message, 1)
 	err := vm.Initialize(
-		context.Background(),
 		ctx,
 		manager.NewMemDB(version.Semantic1_0_0),
 		genesisBytes,
@@ -1243,12 +1231,12 @@ func TestServiceGetTxJSON_OperationTxWithMultipleSecpMintOp(t *testing.T) {
 	}
 	vm.batchTimeout = 0
 
-	err = vm.SetState(context.Background(), snow.Bootstrapping)
+	err = vm.SetState(snow.Bootstrapping)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = vm.SetState(context.Background(), snow.NormalOp)
+	err = vm.SetState(snow.NormalOp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1284,9 +1272,8 @@ func TestServiceGetTxJSON_OperationTxWithMultipleSecpMintOp(t *testing.T) {
 	}
 	ctx.Lock.Lock()
 
-	txs := vm.PendingTxs(context.Background())
-	if len(txs) != 2 {
-		t.Fatalf("Should have returned %d tx(s)", 2)
+	if txs := vm.PendingTxs(); len(txs) != 2 {
+		t.Fatalf("Should have returned %d tx(s)", 1)
 	}
 
 	reply := api.GetTxReply{}
@@ -1316,7 +1303,7 @@ func TestServiceGetTxJSON_OperationTxWithPropertyFxMintOp(t *testing.T) {
 	ctx := NewContext(t)
 	ctx.Lock.Lock()
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -1325,7 +1312,6 @@ func TestServiceGetTxJSON_OperationTxWithPropertyFxMintOp(t *testing.T) {
 	genesisBytes := BuildGenesisTest(t)
 	issuer := make(chan common.Message, 1)
 	err := vm.Initialize(
-		context.Background(),
 		ctx,
 		manager.NewMemDB(version.Semantic1_0_0),
 		genesisBytes,
@@ -1353,12 +1339,12 @@ func TestServiceGetTxJSON_OperationTxWithPropertyFxMintOp(t *testing.T) {
 	}
 	vm.batchTimeout = 0
 
-	err = vm.SetState(context.Background(), snow.Bootstrapping)
+	err = vm.SetState(snow.Bootstrapping)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = vm.SetState(context.Background(), snow.NormalOp)
+	err = vm.SetState(snow.NormalOp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1390,9 +1376,8 @@ func TestServiceGetTxJSON_OperationTxWithPropertyFxMintOp(t *testing.T) {
 	}
 	ctx.Lock.Lock()
 
-	txs := vm.PendingTxs(context.Background())
-	if len(txs) != 2 {
-		t.Fatalf("Should have returned %d tx(s)", 2)
+	if txs := vm.PendingTxs(); len(txs) != 2 {
+		t.Fatalf("Should have returned %d tx(s)", 1)
 	}
 
 	reply := api.GetTxReply{}
@@ -1423,7 +1408,7 @@ func TestServiceGetTxJSON_OperationTxWithPropertyFxMintOpMultiple(t *testing.T) 
 	ctx := NewContext(t)
 	ctx.Lock.Lock()
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -1432,7 +1417,6 @@ func TestServiceGetTxJSON_OperationTxWithPropertyFxMintOpMultiple(t *testing.T) 
 	genesisBytes := BuildGenesisTest(t)
 	issuer := make(chan common.Message, 1)
 	err := vm.Initialize(
-		context.Background(),
 		ctx,
 		manager.NewMemDB(version.Semantic1_0_0),
 		genesisBytes,
@@ -1460,12 +1444,12 @@ func TestServiceGetTxJSON_OperationTxWithPropertyFxMintOpMultiple(t *testing.T) 
 	}
 	vm.batchTimeout = 0
 
-	err = vm.SetState(context.Background(), snow.Bootstrapping)
+	err = vm.SetState(snow.Bootstrapping)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = vm.SetState(context.Background(), snow.NormalOp)
+	err = vm.SetState(snow.NormalOp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1501,9 +1485,8 @@ func TestServiceGetTxJSON_OperationTxWithPropertyFxMintOpMultiple(t *testing.T) 
 	}
 	ctx.Lock.Lock()
 
-	txs := vm.PendingTxs(context.Background())
-	if len(txs) != 2 {
-		t.Fatalf("Should have returned %d tx(s)", 2)
+	if txs := vm.PendingTxs(); len(txs) != 2 {
+		t.Fatalf("Should have returned %d tx(s)", 1)
 	}
 
 	reply := api.GetTxReply{}
@@ -1776,7 +1759,7 @@ func buildOperationTxWithOp(op ...*txs.Operation) *txs.Tx {
 func TestServiceGetNilTx(t *testing.T) {
 	_, vm, s, _, _ := setup(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -1790,7 +1773,7 @@ func TestServiceGetNilTx(t *testing.T) {
 func TestServiceGetUnknownTx(t *testing.T) {
 	_, vm, s, _, _ := setup(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -1804,7 +1787,7 @@ func TestServiceGetUnknownTx(t *testing.T) {
 func TestServiceGetUTXOs(t *testing.T) {
 	_, vm, s, m, _ := setup(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -2071,7 +2054,7 @@ func TestServiceGetUTXOs(t *testing.T) {
 func TestGetAssetDescription(t *testing.T) {
 	_, vm, s, _, genesisTx := setup(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -2098,7 +2081,7 @@ func TestGetAssetDescription(t *testing.T) {
 func TestGetBalance(t *testing.T) {
 	_, vm, s, _, genesisTx := setup(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -2129,7 +2112,7 @@ func TestCreateFixedCapAsset(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, vm, s, _, _ := setupWithKeys(t, tc.avaxAsset)
 			defer func() {
-				if err := vm.Shutdown(context.Background()); err != nil {
+				if err := vm.Shutdown(); err != nil {
 					t.Fatal(err)
 				}
 				vm.ctx.Lock.Unlock()
@@ -2178,7 +2161,7 @@ func TestCreateVariableCapAsset(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, vm, s, _, _ := setupWithKeys(t, tc.avaxAsset)
 			defer func() {
-				if err := vm.Shutdown(context.Background()); err != nil {
+				if err := vm.Shutdown(); err != nil {
 					t.Fatal(err)
 				}
 				vm.ctx.Lock.Unlock()
@@ -2228,7 +2211,7 @@ func TestCreateVariableCapAsset(t *testing.T) {
 			if status := createAssetTx.Status(); status != choices.Processing {
 				t.Fatalf("CreateVariableCapAssetTx status should have been Processing, but was %s", status)
 			}
-			if err := createAssetTx.Accept(context.Background()); err != nil {
+			if err := createAssetTx.Accept(); err != nil {
 				t.Fatalf("Failed to accept CreateVariableCapAssetTx due to: %s", err)
 			}
 
@@ -2261,7 +2244,7 @@ func TestCreateVariableCapAsset(t *testing.T) {
 			if status := mintTx.Status(); status != choices.Processing {
 				t.Fatalf("MintTx status should have been Processing, but was %s", status)
 			}
-			if err := mintTx.Accept(context.Background()); err != nil {
+			if err := mintTx.Accept(); err != nil {
 				t.Fatalf("Failed to accept MintTx due to: %s", err)
 			}
 
@@ -2295,7 +2278,7 @@ func TestNFTWorkflow(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, vm, s, _, _ := setupWithKeys(t, tc.avaxAsset)
 			defer func() {
-				if err := vm.Shutdown(context.Background()); err != nil {
+				if err := vm.Shutdown(); err != nil {
 					t.Fatal(err)
 				}
 				vm.ctx.Lock.Unlock()
@@ -2345,7 +2328,7 @@ func TestNFTWorkflow(t *testing.T) {
 			if createNFTTx.Status() != choices.Processing {
 				t.Fatalf("CreateNFTTx should have been processing after creating the NFT")
 			}
-			if err := createNFTTx.Accept(context.Background()); err != nil {
+			if err := createNFTTx.Accept(); err != nil {
 				t.Fatalf("Failed to accept CreateNFT transaction: %s", err)
 			} else if err := verifyTxFeeDeducted(t, s, fromAddrs, 1); err != nil {
 				t.Fatal(err)
@@ -2386,7 +2369,7 @@ func TestNFTWorkflow(t *testing.T) {
 			}
 
 			// Accept the transaction so that we can send the newly minted NFT
-			if err := mintNFTTx.Accept(context.Background()); err != nil {
+			if err := mintNFTTx.Accept(); err != nil {
 				t.Fatalf("Failed to accept MintNFTTx: %s", err)
 			}
 
@@ -2416,7 +2399,7 @@ func TestNFTWorkflow(t *testing.T) {
 func TestImportExportKey(t *testing.T) {
 	_, vm, s, _, _ := setup(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -2466,7 +2449,7 @@ func TestImportAVMKeyNoDuplicates(t *testing.T) {
 	_, vm, s, _, _ := setup(t, true)
 	ctx := vm.ctx
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		ctx.Lock.Unlock()
@@ -2529,7 +2512,7 @@ func TestImportAVMKeyNoDuplicates(t *testing.T) {
 func TestSend(t *testing.T) {
 	_, vm, s, _, genesisTx := setupWithKeys(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -2586,7 +2569,7 @@ func TestSendMultiple(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, vm, s, _, genesisTx := setupWithKeys(t, tc.avaxAsset)
 			defer func() {
-				if err := vm.Shutdown(context.Background()); err != nil {
+				if err := vm.Shutdown(); err != nil {
 					t.Fatal(err)
 				}
 				vm.ctx.Lock.Unlock()
@@ -2644,7 +2627,7 @@ func TestSendMultiple(t *testing.T) {
 				t.Fatal("Transaction ID returned by SendMultiple does not match the transaction found in vm's pending transactions")
 			}
 
-			if _, err = vm.GetTx(context.Background(), reply.TxID); err != nil {
+			if _, err = vm.GetTx(reply.TxID); err != nil {
 				t.Fatalf("Failed to retrieve created transaction: %s", err)
 			}
 		})
@@ -2654,7 +2637,7 @@ func TestSendMultiple(t *testing.T) {
 func TestCreateAndListAddresses(t *testing.T) {
 	_, vm, s, _, _ := setup(t, true)
 	defer func() {
-		if err := vm.Shutdown(context.Background()); err != nil {
+		if err := vm.Shutdown(); err != nil {
 			t.Fatal(err)
 		}
 		vm.ctx.Lock.Unlock()
@@ -2695,7 +2678,7 @@ func TestImport(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, vm, s, m, genesisTx := setupWithKeys(t, tc.avaxAsset)
 			defer func() {
-				if err := vm.Shutdown(context.Background()); err != nil {
+				if err := vm.Shutdown(); err != nil {
 					t.Fatal(err)
 				}
 				vm.ctx.Lock.Unlock()

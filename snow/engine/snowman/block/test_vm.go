@@ -4,7 +4,6 @@
 package block
 
 import (
-	"context"
 	"errors"
 
 	"github.com/ava-labs/avalanchego/ids"
@@ -31,11 +30,11 @@ type TestVM struct {
 	CantSetPreference,
 	CantLastAccepted bool
 
-	BuildBlockF    func(context.Context) (snowman.Block, error)
-	ParseBlockF    func(context.Context, []byte) (snowman.Block, error)
-	GetBlockF      func(context.Context, ids.ID) (snowman.Block, error)
-	SetPreferenceF func(context.Context, ids.ID) error
-	LastAcceptedF  func(context.Context) (ids.ID, error)
+	BuildBlockF    func() (snowman.Block, error)
+	ParseBlockF    func([]byte) (snowman.Block, error)
+	GetBlockF      func(ids.ID) (snowman.Block, error)
+	SetPreferenceF func(ids.ID) error
+	LastAcceptedF  func() (ids.ID, error)
 }
 
 func (vm *TestVM) Default(cant bool) {
@@ -48,9 +47,9 @@ func (vm *TestVM) Default(cant bool) {
 	vm.CantLastAccepted = cant
 }
 
-func (vm *TestVM) BuildBlock(ctx context.Context) (snowman.Block, error) {
+func (vm *TestVM) BuildBlock() (snowman.Block, error) {
 	if vm.BuildBlockF != nil {
-		return vm.BuildBlockF(ctx)
+		return vm.BuildBlockF()
 	}
 	if vm.CantBuildBlock && vm.T != nil {
 		vm.T.Fatal(errBuildBlock)
@@ -58,9 +57,9 @@ func (vm *TestVM) BuildBlock(ctx context.Context) (snowman.Block, error) {
 	return nil, errBuildBlock
 }
 
-func (vm *TestVM) ParseBlock(ctx context.Context, b []byte) (snowman.Block, error) {
+func (vm *TestVM) ParseBlock(b []byte) (snowman.Block, error) {
 	if vm.ParseBlockF != nil {
-		return vm.ParseBlockF(ctx, b)
+		return vm.ParseBlockF(b)
 	}
 	if vm.CantParseBlock && vm.T != nil {
 		vm.T.Fatal(errParseBlock)
@@ -68,9 +67,9 @@ func (vm *TestVM) ParseBlock(ctx context.Context, b []byte) (snowman.Block, erro
 	return nil, errParseBlock
 }
 
-func (vm *TestVM) GetBlock(ctx context.Context, id ids.ID) (snowman.Block, error) {
+func (vm *TestVM) GetBlock(id ids.ID) (snowman.Block, error) {
 	if vm.GetBlockF != nil {
-		return vm.GetBlockF(ctx, id)
+		return vm.GetBlockF(id)
 	}
 	if vm.CantGetBlock && vm.T != nil {
 		vm.T.Fatal(errGetBlock)
@@ -78,9 +77,9 @@ func (vm *TestVM) GetBlock(ctx context.Context, id ids.ID) (snowman.Block, error
 	return nil, errGetBlock
 }
 
-func (vm *TestVM) SetPreference(ctx context.Context, id ids.ID) error {
+func (vm *TestVM) SetPreference(id ids.ID) error {
 	if vm.SetPreferenceF != nil {
-		return vm.SetPreferenceF(ctx, id)
+		return vm.SetPreferenceF(id)
 	}
 	if vm.CantSetPreference && vm.T != nil {
 		vm.T.Fatalf("Unexpectedly called SetPreference")
@@ -88,9 +87,9 @@ func (vm *TestVM) SetPreference(ctx context.Context, id ids.ID) error {
 	return nil
 }
 
-func (vm *TestVM) LastAccepted(ctx context.Context) (ids.ID, error) {
+func (vm *TestVM) LastAccepted() (ids.ID, error) {
 	if vm.LastAcceptedF != nil {
-		return vm.LastAcceptedF(ctx)
+		return vm.LastAcceptedF()
 	}
 	if vm.CantLastAccepted && vm.T != nil {
 		vm.T.Fatal(errLastAccepted)

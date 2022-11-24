@@ -17,6 +17,8 @@ const (
 	initialUnaryDescription = "SB(NumSuccessfulPolls = 0, SF(Confidence = 0, Finalized = false)) Bits = [0, 256)"
 )
 
+func TestTreeParams(t *testing.T) { ParamsTest(t, TreeFactory{}) }
+
 func TestSnowballSingleton(t *testing.T) {
 	require := require.New(t)
 

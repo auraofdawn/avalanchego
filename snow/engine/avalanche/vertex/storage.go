@@ -4,8 +4,6 @@
 package vertex
 
 import (
-	"context"
-
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/consensus/avalanche"
 )
@@ -14,9 +12,9 @@ import (
 // engine.
 type Storage interface {
 	// Get a vertex by its hash from storage.
-	GetVtx(ctx context.Context, vtxID ids.ID) (avalanche.Vertex, error)
+	GetVtx(vtxID ids.ID) (avalanche.Vertex, error)
 	// Edge returns a list of accepted vertex IDs with no accepted children.
-	Edge(ctx context.Context) (vtxIDs []ids.ID)
+	Edge() (vtxIDs []ids.ID)
 	// Returns "true" if accepted frontier ("Edge") is stop vertex.
-	StopVertexAccepted(ctx context.Context) (bool, error)
+	StopVertexAccepted() (bool, error)
 }

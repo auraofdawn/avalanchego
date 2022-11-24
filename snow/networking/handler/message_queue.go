@@ -114,7 +114,7 @@ func (m *messageQueue) Pop() (context.Context, message.InboundMessage, bool) {
 
 	for {
 		if m.closed {
-			return nil, nil, false
+			return context.Background(), nil, false
 		}
 		if len(m.msgAndCtxs) != 0 {
 			break
@@ -194,13 +194,13 @@ func (m *messageQueue) Shutdown() {
 // canPop will return true for at least one message in [m.msgs]
 func (m *messageQueue) canPop(msg message.InboundMessage) bool {
 	// Always pop connected and disconnected messages.
-	if op := msg.Op(); op == message.ConnectedOp || op == message.DisconnectedOp {
+	if op := msg.Op(); op == message.Connected || op == message.Disconnected {
 		return true
 	}
 
 	// If the deadline to handle [msg] has passed, always pop it.
 	// It will be dropped immediately.
-	if expiration := msg.Expiration(); m.clock.Time().After(expiration) {
+	if expirationTime := msg.ExpirationTime(); !expirationTime.IsZero() && m.clock.Time().After(expirationTime) {
 		return true
 	}
 	// Every node has some allowed CPU allocation depending on

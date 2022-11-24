@@ -71,7 +71,7 @@ func (t *ImportTx) SyntacticVerify(
 	txFeeAssetID ids.ID,
 	txFee uint64,
 	_ uint64,
-	_ int,
+	numFxs int,
 ) error {
 	switch {
 	case t == nil:

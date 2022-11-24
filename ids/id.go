@@ -117,9 +117,7 @@ func (id ID) Bit(i uint) int {
 }
 
 // Hex returns a hex encoded string of this id.
-func (id ID) Hex() string {
-	return hex.EncodeToString(id[:])
-}
+func (id ID) Hex() string { return hex.EncodeToString(id[:]) }
 
 func (id ID) String() string {
 	// We assume that the maximum size of a byte slice that
@@ -152,21 +150,11 @@ func (ids sortIDData) Less(i, j int) bool {
 		ids[i][:],
 		ids[j][:]) == -1
 }
-
-func (ids sortIDData) Len() int {
-	return len(ids)
-}
-
-func (ids sortIDData) Swap(i, j int) {
-	ids[j], ids[i] = ids[i], ids[j]
-}
+func (ids sortIDData) Len() int      { return len(ids) }
+func (ids sortIDData) Swap(i, j int) { ids[j], ids[i] = ids[i], ids[j] }
 
 // SortIDs sorts the ids lexicographically
-func SortIDs(ids []ID) {
-	sort.Sort(sortIDData(ids))
-}
+func SortIDs(ids []ID) { sort.Sort(sortIDData(ids)) }
 
 // IsSortedAndUniqueIDs returns true if the ids are sorted and unique
-func IsSortedAndUniqueIDs(ids []ID) bool {
-	return utils.IsSortedAndUnique(sortIDData(ids))
-}
+func IsSortedAndUniqueIDs(ids []ID) bool { return utils.IsSortedAndUnique(sortIDData(ids)) }

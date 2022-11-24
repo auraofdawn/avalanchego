@@ -28,4 +28,4 @@ func (i *sliceIterator) Value() *Staker {
 	return i.stakers[i.index]
 }
 
-func (*sliceIterator) Release() {}
+func (i *sliceIterator) Release() {}

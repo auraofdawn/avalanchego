@@ -10,9 +10,7 @@ import (
 
 var _ Set = (*set)(nil)
 
-func NoPrecondition(Peer) bool {
-	return true
-}
+func NoPrecondition(Peer) bool { return true }
 
 // Set contains a group of peers.
 type Set interface {

@@ -3,21 +3,15 @@
 
 package health
 
-import "context"
-
-var _ Checker = CheckerFunc(nil)
-
 // Checker can have its health checked
 type Checker interface {
 	// HealthCheck returns health check results and, if not healthy, a non-nil
 	// error
 	//
 	// It is expected that the results are json marshallable.
-	HealthCheck(context.Context) (interface{}, error)
+	HealthCheck() (interface{}, error)
 }
 
-type CheckerFunc func(context.Context) (interface{}, error)
+type CheckerFunc func() (interface{}, error)
 
-func (f CheckerFunc) HealthCheck(ctx context.Context) (interface{}, error) {
-	return f(ctx)
-}
+func (f CheckerFunc) HealthCheck() (interface{}, error) { return f() }

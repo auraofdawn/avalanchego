@@ -38,7 +38,7 @@ type Manager interface {
 	RegisterRequest(
 		nodeID ids.NodeID,
 		chainID ids.ID,
-		measureLatency bool,
+		op message.Op,
 		requestID ids.RequestID,
 		timeoutHandler func(),
 	)
@@ -120,7 +120,7 @@ func (m *manager) RegisterChain(ctx *snow.ConsensusContext) error {
 func (m *manager) RegisterRequest(
 	nodeID ids.NodeID,
 	chainID ids.ID,
-	measureLatency bool,
+	op message.Op,
 	requestID ids.RequestID,
 	timeoutHandler func(),
 ) {
@@ -129,7 +129,7 @@ func (m *manager) RegisterRequest(
 		m.benchlistMgr.RegisterFailure(chainID, nodeID)
 		timeoutHandler()
 	}
-	m.tm.Put(requestID, measureLatency, newTimeoutHandler)
+	m.tm.Put(requestID, op, newTimeoutHandler)
 }
 
 // RegisterResponse registers that we received a response from [nodeID]

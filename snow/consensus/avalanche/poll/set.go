@@ -170,9 +170,7 @@ func (s *set) Vote(requestID uint32, vdr ids.NodeID, votes []ids.ID) []ids.Uniqu
 }
 
 // Len returns the number of outstanding polls
-func (s *set) Len() int {
-	return s.polls.Len()
-}
+func (s *set) Len() int { return s.polls.Len() }
 
 func (s *set) String() string {
 	sb := strings.Builder{}

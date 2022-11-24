@@ -20,6 +20,6 @@ func (n noOpTracer) Start(ctx context.Context, spanName string, opts ...trace.Sp
 	return n.t.Start(ctx, spanName, opts...)
 }
 
-func (noOpTracer) Close() error {
+func (n noOpTracer) Close() error {
 	return nil
 }

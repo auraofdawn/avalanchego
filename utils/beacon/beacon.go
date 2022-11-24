@@ -27,10 +27,5 @@ func New(id ids.NodeID, ip ips.IPPort) Beacon {
 	}
 }
 
-func (b *beacon) ID() ids.NodeID {
-	return b.id
-}
-
-func (b *beacon) IP() ips.IPPort {
-	return b.ip
-}
+func (b *beacon) ID() ids.NodeID { return b.id }
+func (b *beacon) IP() ips.IPPort { return b.ip }

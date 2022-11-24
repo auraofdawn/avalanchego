@@ -68,16 +68,14 @@ func TestHeightBlockIndexPostFork(t *testing.T) {
 		CantGetFullPostForkBlock: true,
 		CantCommit:               true,
 
-		GetFullPostForkBlockF: func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
+		GetFullPostForkBlockF: func(blkID ids.ID) (snowman.Block, error) {
 			blk, found := proBlks[blkID]
 			if !found {
 				return nil, database.ErrNotFound
 			}
 			return blk, nil
 		},
-		CommitF: func() error {
-			return nil
-		},
+		CommitF: func() error { return nil },
 	}
 
 	hIndex := newHeightIndexer(blkSrv,
@@ -148,16 +146,14 @@ func TestHeightBlockIndexAcrossFork(t *testing.T) {
 		CantGetFullPostForkBlock: true,
 		CantCommit:               true,
 
-		GetFullPostForkBlockF: func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
+		GetFullPostForkBlockF: func(blkID ids.ID) (snowman.Block, error) {
 			blk, found := proBlks[blkID]
 			if !found {
 				return nil, database.ErrNotFound
 			}
 			return blk, nil
 		},
-		CommitF: func() error {
-			return nil
-		},
+		CommitF: func() error { return nil },
 	}
 
 	hIndex := newHeightIndexer(blkSrv,
@@ -232,16 +228,14 @@ func TestHeightBlockIndexResumeFromCheckPoint(t *testing.T) {
 		CantGetFullPostForkBlock: true,
 		CantCommit:               true,
 
-		GetFullPostForkBlockF: func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
+		GetFullPostForkBlockF: func(blkID ids.ID) (snowman.Block, error) {
 			blk, found := proBlks[blkID]
 			if !found {
 				return nil, database.ErrNotFound
 			}
 			return blk, nil
 		},
-		CommitF: func() error {
-			return nil
-		},
+		CommitF: func() error { return nil },
 	}
 
 	hIndex := newHeightIndexer(blkSrv,

@@ -165,13 +165,9 @@ type wallet struct {
 	client  avm.Client
 }
 
-func (w *wallet) Builder() Builder {
-	return w.builder
-}
+func (w *wallet) Builder() Builder { return w.builder }
 
-func (w *wallet) Signer() Signer {
-	return w.signer
-}
+func (w *wallet) Signer() Signer { return w.signer }
 
 func (w *wallet) IssueBaseTx(
 	outputs []*avax.TransferableOutput,

@@ -61,9 +61,7 @@ func NewManager(maxSize int) Manager {
 }
 
 // NewDefaultManager returns a new codec manager.
-func NewDefaultManager() Manager {
-	return NewManager(defaultMaxSize)
-}
+func NewDefaultManager() Manager { return NewManager(defaultMaxSize) }
 
 type manager struct {
 	lock    sync.RWMutex

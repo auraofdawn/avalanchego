@@ -28,11 +28,10 @@ type OutputOwners struct {
 	Locktime  uint64        `serialize:"true" json:"locktime"`
 	Threshold uint32        `serialize:"true" json:"threshold"`
 	Addrs     []ids.ShortID `serialize:"true" json:"addresses"`
-
 	// ctx is used in MarshalJSON to convert Addrs into human readable
 	// format with ChainID and NetworkID. Unexported because we don't use
 	// it outside this object.
-	ctx *snow.Context
+	ctx *snow.Context `serialize:"false"`
 }
 
 // InitCtx assigns the OutputOwners.ctx object to given [ctx] object
@@ -133,13 +132,9 @@ func (out *OutputOwners) Verify() error {
 	}
 }
 
-func (out *OutputOwners) VerifyState() error {
-	return out.Verify()
-}
+func (out *OutputOwners) VerifyState() error { return out.Verify() }
 
-func (out *OutputOwners) Sort() {
-	ids.SortShortIDs(out.Addrs)
-}
+func (out *OutputOwners) Sort() { ids.SortShortIDs(out.Addrs) }
 
 // formatAddress formats a given [addr] into human readable format using
 // [ChainID] and [NetworkID] from the provided [ctx].

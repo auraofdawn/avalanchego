@@ -4,8 +4,6 @@
 package common
 
 import (
-	"context"
-
 	"github.com/ava-labs/avalanchego/api/health"
 	"github.com/ava-labs/avalanchego/database/manager"
 	"github.com/ava-labs/avalanchego/snow"
@@ -24,16 +22,14 @@ type VM interface {
 	validators.Connector
 
 	// Initialize this VM.
-	// [chainCtx]: Metadata about this VM.
-	//     [chainCtx.networkID]: The ID of the network this VM's chain is
-	//                           running on.
-	//     [chainCtx.chainID]: The unique ID of the chain this VM is running on.
-	//     [chainCtx.Log]: Used to log messages
-	//     [chainCtx.NodeID]: The unique staker ID of this node.
-	//     [chainCtx.Lock]: A Read/Write lock shared by this VM and the
-	//                      consensus engine that manages this VM. The write
-	//                      lock is held whenever code in the consensus engine
-	//                      calls the VM.
+	// [ctx]: Metadata about this VM.
+	//     [ctx.networkID]: The ID of the network this VM's chain is running on.
+	//     [ctx.chainID]: The unique ID of the chain this VM is running on.
+	//     [ctx.Log]: Used to log messages
+	//     [ctx.NodeID]: The unique staker ID of this node.
+	//     [ctx.Lock]: A Read/Write lock shared by this VM and the consensus
+	//                 engine that manages this VM. The write lock is held
+	//                 whenever code in the consensus engine calls the VM.
 	// [dbManager]: The manager of the database this VM will persist data to.
 	// [genesisBytes]: The byte-encoding of the genesis information of this
 	//                 VM. The VM uses it to initialize its state. For
@@ -44,8 +40,7 @@ type VM interface {
 	// [toEngine]: The channel used to send messages to the consensus engine.
 	// [fxs]: Feature extensions that attach to this VM.
 	Initialize(
-		ctx context.Context,
-		chainCtx *snow.Context,
+		ctx *snow.Context,
 		dbManager manager.Manager,
 		genesisBytes []byte,
 		upgradeBytes []byte,
@@ -56,13 +51,13 @@ type VM interface {
 	) error
 
 	// SetState communicates to VM its next state it starts
-	SetState(ctx context.Context, state snow.State) error
+	SetState(state snow.State) error
 
 	// Shutdown is called when the node is shutting down.
-	Shutdown(context.Context) error
+	Shutdown() error
 
-	// Version returns the version of the VM.
-	Version(context.Context) (string, error)
+	// Version returns the version of the VM this node is running.
+	Version() (string, error)
 
 	// Creates the HTTP handlers for custom VM network calls.
 	//
@@ -76,12 +71,7 @@ type VM interface {
 	//
 	// For example, it might make sense to have an extension for creating
 	// genesis bytes this VM can interpret.
-	//
-	// Note: If this method is called, no other method will be called on this VM.
-	// Each registered VM will have a single instance created to handle static
-	// APIs. This instance will be handled separately from instances created to
-	// service an instance of a chain.
-	CreateStaticHandlers(context.Context) (map[string]*HTTPHandler, error)
+	CreateStaticHandlers() (map[string]*HTTPHandler, error)
 
 	// Creates the HTTP handlers for custom chain network calls.
 	//
@@ -96,5 +86,5 @@ type VM interface {
 	// For example, if this VM implements an account-based payments system,
 	// it have an extension called `accounts`, where clients could get
 	// information about their accounts.
-	CreateHandlers(context.Context) (map[string]*HTTPHandler, error)
+	CreateHandlers() (map[string]*HTTPHandler, error)
 }

@@ -12,9 +12,7 @@ var errTest = errors.New("non-nil error")
 
 type testVerifiable struct{ err error }
 
-func (v testVerifiable) Verify() error {
-	return v.err
-}
+func (v testVerifiable) Verify() error { return v.err }
 
 func TestAllNil(t *testing.T) {
 	err := All(

@@ -5,7 +5,6 @@ package avm
 
 import (
 	"container/list"
-	"context"
 	"testing"
 
 	"github.com/ava-labs/avalanchego/api"
@@ -66,7 +65,7 @@ func TestWalletService_SendMultiple(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, vm, ws, _, genesisTx := setupWSWithKeys(t, tc.avaxAsset)
 			defer func() {
-				if err := vm.Shutdown(context.Background()); err != nil {
+				if err := vm.Shutdown(); err != nil {
 					t.Fatal(err)
 				}
 				vm.ctx.Lock.Unlock()
@@ -124,7 +123,7 @@ func TestWalletService_SendMultiple(t *testing.T) {
 				t.Fatal("Transaction ID returned by SendMultiple does not match the transaction found in vm's pending transactions")
 			}
 
-			if _, err = vm.GetTx(context.Background(), reply.TxID); err != nil {
+			if _, err = vm.GetTx(reply.TxID); err != nil {
 				t.Fatalf("Failed to retrieve created transaction: %s", err)
 			}
 		})

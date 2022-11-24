@@ -4,7 +4,6 @@
 package chains
 
 import (
-	"context"
 	"crypto"
 	"crypto/tls"
 	"errors"
@@ -48,7 +47,6 @@ import (
 	"github.com/ava-labs/avalanchego/vms"
 	"github.com/ava-labs/avalanchego/vms/metervm"
 	"github.com/ava-labs/avalanchego/vms/proposervm"
-	"github.com/ava-labs/avalanchego/vms/tracedvm"
 
 	dbManager "github.com/ava-labs/avalanchego/database/manager"
 	timetracker "github.com/ava-labs/avalanchego/snow/networking/tracker"
@@ -73,7 +71,7 @@ var (
 	errUnknownChainID   = errors.New("unknown chain ID")
 	errUnknownVMType    = errors.New("the vm should have type avalanche.DAGVM or snowman.ChainVM")
 	errCreatePlatformVM = errors.New("attempted to create a chain running the PlatformVM")
-	errNotBootstrapped  = errors.New("subnets not bootstrapped")
+	errNotBootstrapped  = errors.New("chains not bootstrapped")
 
 	_ Manager = (*manager)(nil)
 )
@@ -163,14 +161,14 @@ type ManagerConfig struct {
 	DecisionAcceptorGroup       snow.AcceptorGroup
 	ConsensusAcceptorGroup      snow.AcceptorGroup
 	DBManager                   dbManager.Manager
-	MsgCreator                  message.OutboundMsgBuilder // message creator, shared with network
-	Router                      router.Router              // Routes incoming messages to the appropriate chain
-	Net                         network.Network            // Sends consensus messages to other validators
-	ConsensusParams             avcon.Parameters           // The consensus parameters (alpha, beta, etc.) for new chains
-	Validators                  validators.Manager         // Validators validating on this chain
-	NodeID                      ids.NodeID                 // The ID of this node
-	NetworkID                   uint32                     // ID of the network this node is connected to
-	Server                      server.Server              // Handles HTTP API calls
+	MsgCreator                  message.Creator    // message creator, shared with network
+	Router                      router.Router      // Routes incoming messages to the appropriate chain
+	Net                         network.Network    // Sends consensus messages to other validators
+	ConsensusParams             avcon.Parameters   // The consensus parameters (alpha, beta, etc.) for new chains
+	Validators                  validators.Manager // Validators validating on this chain
+	NodeID                      ids.NodeID         // The ID of this node
+	NetworkID                   uint32             // ID of the network this node is connected to
+	Server                      server.Server      // Handles HTTP API calls
 	Keystore                    keystore.Keystore
 	AtomicMemory                *atomic.Memory
 	AVAXAssetID                 ids.ID
@@ -224,7 +222,6 @@ type manager struct {
 	unblockChainCreatorCh  chan struct{}
 	chainCreatorShutdownCh chan struct{}
 
-	subnetsLock sync.Mutex
 	// Key: Subnet's ID
 	// Value: Subnet description
 	subnets map[ids.ID]Subnet
@@ -234,7 +231,7 @@ type manager struct {
 	// Value: The chain
 	chains map[ids.ID]handler.Handler
 
-	// snowman++ related interface to allow validators retrieval
+	// snowman++ related interface to allow validators retrival
 	validatorState validators.State
 }
 
@@ -252,55 +249,43 @@ func New(config *ManagerConfig) Manager {
 }
 
 // Router that this chain manager is using to route consensus messages to chains
-func (m *manager) Router() router.Router {
-	return m.ManagerConfig.Router
-}
+func (m *manager) Router() router.Router { return m.ManagerConfig.Router }
 
 // QueueChainCreation queues a chain creation request
 // Invariant: Whitelisted Subnet must be checked before calling this function
 func (m *manager) QueueChainCreation(chainParams ChainParameters) {
-	m.subnetsLock.Lock()
-	sb, exists := m.subnets[chainParams.SubnetID]
-	if !exists {
-		sb = newSubnet()
-		m.subnets[chainParams.SubnetID] = sb
-	}
-	addedChain := sb.addChain(chainParams.ID)
-	m.subnetsLock.Unlock()
-
-	if !addedChain {
-		m.Log.Debug("skipping chain creation",
-			zap.String("reason", "chain already staged"),
-			zap.Stringer("subnetID", chainParams.SubnetID),
-			zap.Stringer("chainID", chainParams.ID),
-			zap.Stringer("vmID", chainParams.VMID),
-		)
-		return
-	}
-
 	if ok := m.chainsQueue.PushRight(chainParams); !ok {
-		m.Log.Warn("skipping chain creation",
-			zap.String("reason", "couldn't enqueue chain"),
-			zap.Stringer("subnetID", chainParams.SubnetID),
+		m.Log.Debug("cannot enqueue new chain",
 			zap.Stringer("chainID", chainParams.ID),
-			zap.Stringer("vmID", chainParams.VMID),
 		)
 	}
 }
 
 // createChain creates and starts the chain
-// Note: it is expected for the subnet to already have the chain registered as
-//       bootstrapping before this function is called
 func (m *manager) createChain(chainParams ChainParameters) {
+	// Assert that there isn't already a chain with an alias in [chain].Aliases
+	// (Recall that the string representation of a chain's ID is also an alias
+	//  for a chain)
+	if alias, isRepeat := m.isChainWithAlias(chainParams.ID.String()); isRepeat {
+		m.Log.Debug("skipping chain creation",
+			zap.String("reason", "there is already a chain with same alias"),
+			zap.String("alias", alias),
+		)
+		return
+	}
+
 	m.Log.Info("creating chain",
-		zap.Stringer("subnetID", chainParams.SubnetID),
 		zap.Stringer("chainID", chainParams.ID),
 		zap.Stringer("vmID", chainParams.VMID),
 	)
 
-	m.subnetsLock.Lock()
-	sb := m.subnets[chainParams.SubnetID]
-	m.subnetsLock.Unlock()
+	sb, exists := m.subnets[chainParams.SubnetID]
+	if !exists {
+		sb = newSubnet()
+		m.subnets[chainParams.SubnetID] = sb
+	}
+
+	sb.addChain(chainParams.ID)
 
 	// Note: buildChain builds all chain's relevant objects (notably engine and handler)
 	// but does not start their operations. Starting of the handler (which could potentially
@@ -309,12 +294,11 @@ func (m *manager) createChain(chainParams ChainParameters) {
 	// upon start is dropped.
 	chain, err := m.buildChain(chainParams, sb)
 	if err != nil {
+		sb.removeChain(chainParams.ID)
 		if m.CriticalChains.Contains(chainParams.ID) {
 			// Shut down if we fail to create a required chain (i.e. X, P or C)
 			m.Log.Fatal("error creating required chain",
-				zap.Stringer("subnetID", chainParams.SubnetID),
 				zap.Stringer("chainID", chainParams.ID),
-				zap.Stringer("vmID", chainParams.VMID),
 				zap.Error(err),
 			)
 			go m.ShutdownNodeFunc(1)
@@ -323,10 +307,7 @@ func (m *manager) createChain(chainParams ChainParameters) {
 
 		chainAlias := m.PrimaryAliasOrDefault(chainParams.ID)
 		m.Log.Error("error creating chain",
-			zap.Stringer("subnetID", chainParams.SubnetID),
-			zap.Stringer("chainID", chainParams.ID),
 			zap.String("chainAlias", chainAlias),
-			zap.Stringer("vmID", chainParams.VMID),
 			zap.Error(err),
 		)
 
@@ -335,18 +316,11 @@ func (m *manager) createChain(chainParams ChainParameters) {
 		// node may not be properly validating the subnet they expect to be
 		// validating.
 		healthCheckErr := fmt.Errorf("failed to create chain on subnet: %s", chainParams.SubnetID)
-		err := m.Health.RegisterHealthCheck(
-			chainAlias,
-			health.CheckerFunc(func(context.Context) (interface{}, error) {
-				return nil, healthCheckErr
-			}),
-		)
-		if err != nil {
+		if err := m.Health.RegisterHealthCheck(chainAlias, health.CheckerFunc(func() (interface{}, error) {
+			return nil, healthCheckErr
+		})); err != nil {
 			m.Log.Error("failed to register failing health check",
-				zap.Stringer("subnetID", chainParams.SubnetID),
-				zap.Stringer("chainID", chainParams.ID),
 				zap.String("chainAlias", chainAlias),
-				zap.Stringer("vmID", chainParams.VMID),
 				zap.Error(err),
 			)
 		}
@@ -360,9 +334,7 @@ func (m *manager) createChain(chainParams ChainParameters) {
 	// Associate the newly created chain with its default alias
 	if err := m.Alias(chainParams.ID, chainParams.ID.String()); err != nil {
 		m.Log.Error("failed to alias the new chain with itself",
-			zap.Stringer("subnetID", chainParams.SubnetID),
 			zap.Stringer("chainID", chainParams.ID),
-			zap.Stringer("vmID", chainParams.VMID),
 			zap.Error(err),
 		)
 	}
@@ -373,7 +345,7 @@ func (m *manager) createChain(chainParams ChainParameters) {
 	// Allows messages to be routed to the new chain. If the handler hasn't been
 	// started and a message is forwarded, then the message will block until the
 	// handler is started.
-	m.ManagerConfig.Router.AddChain(context.TODO(), chain.Handler)
+	m.ManagerConfig.Router.AddChain(chain.Handler)
 
 	// Register bootstrapped health checks after P chain has been added to
 	// chains.
@@ -383,13 +355,13 @@ func (m *manager) createChain(chainParams ChainParameters) {
 	//       the manager.
 	if chainParams.ID == constants.PlatformChainID {
 		if err := m.registerBootstrappedHealthChecks(); err != nil {
-			chain.Handler.StopWithError(context.TODO(), err)
+			chain.Handler.StopWithError(err)
 		}
 	}
 
 	// Tell the chain to start processing messages.
 	// If the X, P, or C Chain panics, do not attempt to recover
-	chain.Handler.Start(context.TODO(), !m.CriticalChains.Contains(chainParams.ID))
+	chain.Handler.Start(!m.CriticalChains.Contains(chainParams.ID))
 }
 
 // Create a chain
@@ -556,9 +528,7 @@ func (m *manager) buildChain(chainParams ChainParameters, sb Subnet) (*chain, er
 	return chain, nil
 }
 
-func (m *manager) AddRegistrant(r Registrant) {
-	m.registrants = append(m.registrants, r)
-}
+func (m *manager) AddRegistrant(r Registrant) { m.registrants = append(m.registrants, r) }
 
 // Create a DAG-based blockchain that uses Avalanche
 func (m *manager) createAvalancheChain(
@@ -637,9 +607,6 @@ func (m *manager) createAvalancheChain(
 	if m.MeterVMEnabled {
 		vm = metervm.NewVertexVM(vm)
 	}
-	if m.TracingEnabled {
-		vm = tracedvm.NewVertexVM(vm, m.Tracer)
-	}
 
 	// Handles serialization/deserialization of vertices and also the
 	// persistence of vertices
@@ -652,9 +619,7 @@ func (m *manager) createAvalancheChain(
 			XChainMigrationTime: version.GetXChainMigrationTime(ctx.NetworkID),
 		},
 	)
-
-	err = vm.Initialize(
-		context.TODO(),
+	if err := vm.Initialize(
 		ctx.Context,
 		vmDBManager,
 		genesisData,
@@ -663,8 +628,7 @@ func (m *manager) createAvalancheChain(
 		msgChan,
 		fxs,
 		messageSender,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, fmt.Errorf("error during vm's Initialize: %w", err)
 	}
 
@@ -675,6 +639,7 @@ func (m *manager) createAvalancheChain(
 
 	// Asynchronously passes messages from the network to the consensus engine
 	handler, err := handler.New(
+		m.MsgCreator,
 		ctx,
 		vdrs,
 		msgChan,
@@ -723,10 +688,9 @@ func (m *manager) createAvalancheChain(
 		VM:            vm,
 	}
 	bootstrapper, err := avbootstrap.New(
-		context.TODO(),
 		bootstrapperConfig,
-		func(ctx context.Context, lastReqID uint32) error {
-			return handler.Consensus().Start(ctx, lastReqID+1)
+		func(lastReqID uint32) error {
+			return handler.Consensus().Start(lastReqID + 1)
 		},
 	)
 	if err != nil {
@@ -739,11 +703,6 @@ func (m *manager) createAvalancheChain(
 
 	handler.SetBootstrapper(bootstrapper)
 
-	var consensus avcon.Consensus = &avcon.Topological{}
-	if m.TracingEnabled {
-		consensus = avcon.Trace(consensus, m.Tracer)
-	}
-
 	// create engine gear
 	engineConfig := aveng.Config{
 		Ctx:           bootstrapperConfig.Ctx,
@@ -753,7 +712,7 @@ func (m *manager) createAvalancheChain(
 		Sender:        bootstrapperConfig.Sender,
 		Validators:    vdrs,
 		Params:        consensusParams,
-		Consensus:     consensus,
+		Consensus:     &avcon.Topological{},
 	}
 	engine, err := aveng.New(engineConfig)
 	if err != nil {
@@ -843,28 +802,23 @@ func (m *manager) createSnowmanChain(
 		return nil, fmt.Errorf("problem initializing event dispatcher: %w", err)
 	}
 
-	// first vm to be init is P-Chain once, which provides validator interface to all ProposerVMs
 	var bootstrapFunc func()
+	// first vm to be init is P-Chain once, which provides validator interface to all ProposerVMs
 	if m.validatorState == nil {
 		valState, ok := vm.(validators.State)
 		if !ok {
 			return nil, fmt.Errorf("expected validators.State but got %T", vm)
 		}
 
-		if m.TracingEnabled {
-			valState = validators.Trace(valState, "platformvm", m.Tracer)
-		}
+		lockedValState := validators.NewLockedState(&ctx.Lock, valState)
+
+		// Initialize the validator state for future chains.
+		m.validatorState = lockedValState
 
 		// Notice that this context is left unlocked. This is because the
 		// lock will already be held when accessing these values on the
 		// P-chain.
 		ctx.ValidatorState = valState
-
-		// Initialize the validator state for future chains.
-		m.validatorState = validators.NewLockedState(&ctx.Lock, valState)
-		if m.TracingEnabled {
-			m.validatorState = validators.Trace(m.validatorState, "lockedState", m.Tracer)
-		}
 
 		if !m.ManagerConfig.StakingEnabled {
 			m.validatorState = validators.NewNoValidatorsState(m.validatorState)
@@ -872,12 +826,7 @@ func (m *manager) createSnowmanChain(
 		}
 
 		// Set this func only for platform
-		//
-		// The snowman bootstrapper ensures this function is only executed once, so
-		// we don't need to be concerned about closing this channel multiple times.
-		bootstrapFunc = func() {
-			close(m.unblockChainCreatorCh)
-		}
+		bootstrapFunc = func() { close(m.unblockChainCreatorCh) }
 	}
 
 	// Initialize the ProposerVM and the vm wrapped inside it
@@ -886,37 +835,16 @@ func (m *manager) createSnowmanChain(
 		return nil, fmt.Errorf("error while fetching chain config: %w", err)
 	}
 
-	minBlockDelay := proposervm.DefaultMinBlockDelay
-	if subnetCfg, ok := m.SubnetConfigs[ctx.SubnetID]; ok {
-		minBlockDelay = subnetCfg.ProposerMinBlockDelay
-	}
-	m.Log.Info("creating proposervm wrapper",
-		zap.Time("activationTime", m.ApricotPhase4Time),
-		zap.Uint64("minPChainHeight", m.ApricotPhase4MinPChainHeight),
-		zap.Duration("minBlockDelay", minBlockDelay),
-	)
-
-	chainAlias := m.PrimaryAliasOrDefault(ctx.ChainID)
-	if m.TracingEnabled {
-		vm = tracedvm.NewBlockVM(vm, chainAlias, m.Tracer)
-	}
-
 	vm = proposervm.New(
 		vm,
 		m.ApricotPhase4Time,
 		m.ApricotPhase4MinPChainHeight,
-		minBlockDelay,
 	)
 
 	if m.MeterVMEnabled {
 		vm = metervm.NewBlockVM(vm)
 	}
-	if m.TracingEnabled {
-		vm = tracedvm.NewBlockVM(vm, "proposervm", m.Tracer)
-	}
-
 	if err := vm.Initialize(
-		context.TODO(),
 		ctx.Context,
 		vmDBManager,
 		genesisData,
@@ -936,6 +864,7 @@ func (m *manager) createSnowmanChain(
 
 	// Asynchronously passes messages from the network to the consensus engine
 	handler, err := handler.New(
+		m.MsgCreator,
 		ctx,
 		vdrs,
 		msgChan,
@@ -974,11 +903,6 @@ func (m *manager) createSnowmanChain(
 		return nil, fmt.Errorf("couldn't initialize snow base message handler: %w", err)
 	}
 
-	var consensus smcon.Consensus = &smcon.Topological{}
-	if m.TracingEnabled {
-		consensus = smcon.Trace(consensus, m.Tracer)
-	}
-
 	// Create engine, bootstrapper and state-syncer in this order,
 	// to make sure start callbacks are duly initialized
 	engineConfig := smeng.Config{
@@ -988,7 +912,7 @@ func (m *manager) createSnowmanChain(
 		Sender:        commonCfg.Sender,
 		Validators:    vdrs,
 		Params:        consensusParams,
-		Consensus:     consensus,
+		Consensus:     &smcon.Topological{},
 	}
 	engine, err := smeng.New(engineConfig)
 	if err != nil {
@@ -1010,7 +934,6 @@ func (m *manager) createSnowmanChain(
 		Bootstrapped:  bootstrapFunc,
 	}
 	bootstrapper, err := smbootstrap.New(
-		context.TODO(),
 		bootstrapCfg,
 		engine.Start,
 	)
@@ -1046,6 +969,8 @@ func (m *manager) createSnowmanChain(
 	handler.SetStateSyncer(stateSyncer)
 
 	// Register health checks
+	chainAlias := m.PrimaryAliasOrDefault(ctx.ChainID)
+
 	if err := m.Health.RegisterHealthCheck(chainAlias, handler); err != nil {
 		return nil, fmt.Errorf("couldn't add health check for chain %s: %w", chainAlias, err)
 	}
@@ -1079,26 +1004,32 @@ func (m *manager) IsBootstrapped(id ids.ID) bool {
 	return chain.Context().GetState() == snow.NormalOp
 }
 
-func (m *manager) subnetsNotBootstrapped() []ids.ID {
-	m.subnetsLock.Lock()
-	defer m.subnetsLock.Unlock()
+func (m *manager) chainsNotBootstrapped() []ids.ID {
+	m.chainsLock.Lock()
+	defer m.chainsLock.Unlock()
 
-	subnetsBootstrapping := make([]ids.ID, 0, len(m.subnets))
-	for subnetID, subnet := range m.subnets {
-		if !subnet.IsBootstrapped() {
-			subnetsBootstrapping = append(subnetsBootstrapping, subnetID)
+	chainsBootstrapping := make([]ids.ID, 0, len(m.chains))
+	for chainID, chain := range m.chains {
+		if chain.Context().GetState() == snow.NormalOp {
+			continue
 		}
+		chainsBootstrapping = append(chainsBootstrapping, chainID)
 	}
-	return subnetsBootstrapping
+	return chainsBootstrapping
 }
 
 func (m *manager) registerBootstrappedHealthChecks() error {
-	bootstrappedCheck := health.CheckerFunc(func(context.Context) (interface{}, error) {
-		subnetIDs := m.subnetsNotBootstrapped()
-		if len(subnetIDs) != 0 {
-			return subnetIDs, errNotBootstrapped
+	bootstrappedCheck := health.CheckerFunc(func() (interface{}, error) {
+		chains := m.chainsNotBootstrapped()
+		aliases := make([]string, len(chains))
+		for i, chain := range chains {
+			aliases[i] = m.PrimaryAliasOrDefault(chain)
 		}
-		return subnetIDs, nil
+
+		if len(aliases) != 0 {
+			return aliases, errNotBootstrapped
+		}
+		return aliases, nil
 	})
 	if err := m.Health.RegisterReadinessCheck("bootstrapped", bootstrappedCheck); err != nil {
 		return fmt.Errorf("couldn't register bootstrapped readiness check: %w", err)
@@ -1111,12 +1042,6 @@ func (m *manager) registerBootstrappedHealthChecks() error {
 
 // Starts chain creation loop to process queued chains
 func (m *manager) StartChainCreator(platform ChainParameters) {
-	m.subnetsLock.Lock()
-	sb := newSubnet()
-	m.subnets[platform.SubnetID] = sb
-	sb.addChain(platform.ID)
-	m.subnetsLock.Unlock()
-
 	// The P-chain is created synchronously to ensure that `VM.Initialize` has
 	// finished before returning from this function. This is required because
 	// the P-chain initializes state that the rest of the node initialization
@@ -1159,13 +1084,11 @@ func (m *manager) closeChainCreator() {
 func (m *manager) Shutdown() {
 	m.Log.Info("shutting down chain manager")
 	m.closeChainCreator()
-	m.ManagerConfig.Router.Shutdown(context.TODO())
+	m.ManagerConfig.Router.Shutdown()
 }
 
 // LookupVM returns the ID of the VM associated with an alias
-func (m *manager) LookupVM(alias string) (ids.ID, error) {
-	return m.VMManager.Lookup(alias)
-}
+func (m *manager) LookupVM(alias string) (ids.ID, error) { return m.VMManager.Lookup(alias) }
 
 // Notify registrants [those who want to know about the creation of chains]
 // that the specified chain has been created
@@ -1173,6 +1096,18 @@ func (m *manager) notifyRegistrants(name string, engine common.Engine) {
 	for _, registrant := range m.registrants {
 		registrant.RegisterChain(name, engine)
 	}
+}
+
+// Returns:
+// 1) the alias that already exists, or the empty string if there is none
+// 2) true iff there exists a chain such that the chain has an alias in [aliases]
+func (m *manager) isChainWithAlias(aliases ...string) (string, bool) {
+	for _, alias := range aliases {
+		if _, err := m.Lookup(alias); err == nil {
+			return alias, true
+		}
+	}
+	return "", false
 }
 
 // getChainConfig returns value of a entry by looking at ID key and alias key

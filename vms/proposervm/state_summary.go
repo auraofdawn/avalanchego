@@ -4,8 +4,6 @@
 package proposervm
 
 import (
-	"context"
-
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 	"github.com/ava-labs/avalanchego/vms/proposervm/summary"
 )
@@ -38,7 +36,7 @@ func (s *stateSummary) Height() uint64 {
 	return s.innerSummary.Height()
 }
 
-func (s *stateSummary) Accept(ctx context.Context) (bool, error) {
+func (s *stateSummary) Accept() (bool, error) {
 	// If we have already synced up to or past this state summary, we do not
 	// want to sync to it.
 	if s.vm.lastAcceptedHeight >= s.Height() {
@@ -61,5 +59,5 @@ func (s *stateSummary) Accept(ctx context.Context) (bool, error) {
 	// innerSummary.Accept may fail with the proposerVM block and index already
 	// updated. The error would be treated as fatal and the chain would then be
 	// repaired upon the VM restart.
-	return s.innerSummary.Accept(ctx)
+	return s.innerSummary.Accept()
 }

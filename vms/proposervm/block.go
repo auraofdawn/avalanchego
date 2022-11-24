@@ -4,7 +4,6 @@
 package proposervm
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -47,15 +46,15 @@ type Block interface {
 	// acceptOuterBlk and acceptInnerBlk allow controlling acceptance of outer
 	// and inner blocks.
 	acceptOuterBlk() error
-	acceptInnerBlk(context.Context) error
+	acceptInnerBlk() error
 
-	verifyPreForkChild(ctx context.Context, child *preForkBlock) error
-	verifyPostForkChild(ctx context.Context, child *postForkBlock) error
-	verifyPostForkOption(ctx context.Context, child *postForkOption) error
+	verifyPreForkChild(child *preForkBlock) error
+	verifyPostForkChild(child *postForkBlock) error
+	verifyPostForkOption(child *postForkOption) error
 
-	buildChild(context.Context) (Block, error)
+	buildChild() (Block, error)
 
-	pChainHeight(context.Context) (uint64, error)
+	pChainHeight() (uint64, error)
 }
 
 type PostForkBlock interface {
@@ -88,13 +87,8 @@ func (p *postForkCommonComponents) Height() uint64 {
 // 7) [child]'s timestamp is within its proposer's window
 // 8) [child] has a valid signature from its proposer
 // 9) [child]'s inner block is valid
-func (p *postForkCommonComponents) Verify(
-	ctx context.Context,
-	parentTimestamp time.Time,
-	parentPChainHeight uint64,
-	child *postForkBlock,
-) error {
-	if err := verifyIsNotOracleBlock(ctx, p.innerBlk); err != nil {
+func (p *postForkCommonComponents) Verify(parentTimestamp time.Time, parentPChainHeight uint64, child *postForkBlock) error {
+	if err := verifyIsNotOracleBlock(p.innerBlk); err != nil {
 		return err
 	}
 
@@ -123,7 +117,7 @@ func (p *postForkCommonComponents) Verify(
 	// been synced up to this point yet.
 	if p.vm.consensusState == snow.NormalOp {
 		childID := child.ID()
-		currentPChainHeight, err := p.vm.ctx.ValidatorState.GetCurrentHeight(ctx)
+		currentPChainHeight, err := p.vm.ctx.ValidatorState.GetCurrentHeight()
 		if err != nil {
 			p.vm.ctx.Log.Error("block verification failed",
 				zap.String("reason", "failed to get current P-Chain height"),
@@ -138,7 +132,7 @@ func (p *postForkCommonComponents) Verify(
 
 		childHeight := child.Height()
 		proposerID := child.Proposer()
-		minDelay, err := p.vm.Windower.Delay(ctx, childHeight, parentPChainHeight, proposerID)
+		minDelay, err := p.vm.Windower.Delay(childHeight, parentPChainHeight, proposerID)
 		if err != nil {
 			return err
 		}
@@ -162,12 +156,11 @@ func (p *postForkCommonComponents) Verify(
 		)
 	}
 
-	return p.vm.verifyAndRecordInnerBlk(ctx, child)
+	return p.vm.verifyAndRecordInnerBlk(child)
 }
 
 // Return the child (a *postForkBlock) of this block
 func (p *postForkCommonComponents) buildChild(
-	ctx context.Context,
 	parentID ids.ID,
 	parentTimestamp time.Time,
 	parentPChainHeight uint64,
@@ -180,7 +173,7 @@ func (p *postForkCommonComponents) buildChild(
 
 	// The child's P-Chain height is proposed as the optimal P-Chain height that
 	// is at least the parent's P-Chain height
-	pChainHeight, err := p.vm.optimalPChainHeight(ctx, parentPChainHeight)
+	pChainHeight, err := p.vm.optimalPChainHeight(parentPChainHeight)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +182,7 @@ func (p *postForkCommonComponents) buildChild(
 	if delay < proposer.MaxDelay {
 		parentHeight := p.innerBlk.Height()
 		proposerID := p.vm.ctx.NodeID
-		minDelay, err := p.vm.Windower.Delay(ctx, parentHeight+1, parentPChainHeight, proposerID)
+		minDelay, err := p.vm.Windower.Delay(parentHeight+1, parentPChainHeight, proposerID)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +206,7 @@ func (p *postForkCommonComponents) buildChild(
 		}
 	}
 
-	innerBlock, err := p.vm.ChainVM.BuildBlock(ctx)
+	innerBlock, err := p.vm.ChainVM.BuildBlock()
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +262,7 @@ func (p *postForkCommonComponents) setInnerBlk(innerBlk snowman.Block) {
 	p.innerBlk = innerBlk
 }
 
-func verifyIsOracleBlock(ctx context.Context, b snowman.Block) error {
+func verifyIsOracleBlock(b snowman.Block) error {
 	oracle, ok := b.(snowman.OracleBlock)
 	if !ok {
 		return fmt.Errorf(
@@ -277,16 +270,16 @@ func verifyIsOracleBlock(ctx context.Context, b snowman.Block) error {
 			errUnexpectedBlockType, b.ID(), b,
 		)
 	}
-	_, err := oracle.Options(ctx)
+	_, err := oracle.Options()
 	return err
 }
 
-func verifyIsNotOracleBlock(ctx context.Context, b snowman.Block) error {
+func verifyIsNotOracleBlock(b snowman.Block) error {
 	oracle, ok := b.(snowman.OracleBlock)
 	if !ok {
 		return nil
 	}
-	_, err := oracle.Options(ctx)
+	_, err := oracle.Options()
 	switch err {
 	case nil:
 		return fmt.Errorf(

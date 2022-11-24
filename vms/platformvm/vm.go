@@ -4,7 +4,6 @@
 package platformvm
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -55,7 +54,7 @@ import (
 )
 
 const (
-	validatorSetsCacheSize        = 512
+	validatorSetsCacheSize        = 64
 	maxRecentlyAcceptedWindowSize = 256
 	recentlyAcceptedWindowTTL     = 5 * time.Minute
 )
@@ -109,20 +108,19 @@ type VM struct {
 // Initialize this blockchain.
 // [vm.ChainManager] and [vm.vdrMgr] must be set before this function is called.
 func (vm *VM) Initialize(
-	ctx context.Context,
-	chainCtx *snow.Context,
+	ctx *snow.Context,
 	dbManager manager.Manager,
 	genesisBytes []byte,
-	_ []byte,
-	_ []byte,
+	upgradeBytes []byte,
+	configBytes []byte,
 	toEngine chan<- common.Message,
 	_ []*common.Fx,
 	appSender common.AppSender,
 ) error {
-	chainCtx.Log.Verbo("initializing platform chain")
+	ctx.Log.Verbo("initializing platform chain")
 
 	registerer := prometheus.NewRegistry()
-	if err := chainCtx.Metrics.Register(registerer); err != nil {
+	if err := ctx.Metrics.Register(registerer); err != nil {
 		return err
 	}
 
@@ -133,7 +131,7 @@ func (vm *VM) Initialize(
 		return fmt.Errorf("failed to initialize metrics: %w", err)
 	}
 
-	vm.ctx = chainCtx
+	vm.ctx = ctx
 	vm.dbManager = dbManager
 
 	vm.codecRegistry = linearcodec.NewDefault()
@@ -165,10 +163,10 @@ func (vm *VM) Initialize(
 		return err
 	}
 
-	vm.atomicUtxosManager = avax.NewAtomicUTXOManager(chainCtx.SharedMemory, txs.Codec)
+	vm.atomicUtxosManager = avax.NewAtomicUTXOManager(ctx.SharedMemory, txs.Codec)
 	utxoHandler := utxo.NewHandler(vm.ctx, &vm.clock, vm.state, vm.fx)
 	vm.uptimeManager = uptime.NewManager(vm.state)
-	vm.UptimeLockedCalculator.SetCalculator(&vm.bootstrapped, &chainCtx.Lock, vm.uptimeManager)
+	vm.UptimeLockedCalculator.SetCalculator(&vm.bootstrapped, &ctx.Lock, vm.uptimeManager)
 
 	vm.txBuilder = txbuilder.New(
 		vm.ctx,
@@ -227,10 +225,10 @@ func (vm *VM) Initialize(
 	}
 
 	lastAcceptedID := vm.state.GetLastAccepted()
-	chainCtx.Log.Info("initializing last accepted",
+	ctx.Log.Info("initializing last accepted",
 		zap.Stringer("blkID", lastAcceptedID),
 	)
-	return vm.SetPreference(ctx, lastAcceptedID)
+	return vm.SetPreference(lastAcceptedID)
 }
 
 // Create all chains that exist that this node validates.
@@ -315,7 +313,7 @@ func (vm *VM) onNormalOperationsStarted() error {
 	return nil
 }
 
-func (vm *VM) SetState(_ context.Context, state snow.State) error {
+func (vm *VM) SetState(state snow.State) error {
 	switch state {
 	case snow.Bootstrapping:
 		return vm.onBootstrapStarted()
@@ -327,7 +325,7 @@ func (vm *VM) SetState(_ context.Context, state snow.State) error {
 }
 
 // Shutdown this blockchain
-func (vm *VM) Shutdown(context.Context) error {
+func (vm *VM) Shutdown() error {
 	if vm.dbManager == nil {
 		return nil
 	}
@@ -362,7 +360,7 @@ func (vm *VM) Shutdown(context.Context) error {
 	return errs.Err
 }
 
-func (vm *VM) ParseBlock(_ context.Context, b []byte) (snowman.Block, error) {
+func (vm *VM) ParseBlock(b []byte) (snowman.Block, error) {
 	// Note: blocks to be parsed are not verified, so we must used blocks.Codec
 	// rather than blocks.GenesisCodec
 	statelessBlk, err := blocks.Parse(blocks.Codec, b)
@@ -372,29 +370,29 @@ func (vm *VM) ParseBlock(_ context.Context, b []byte) (snowman.Block, error) {
 	return vm.manager.NewBlock(statelessBlk), nil
 }
 
-func (vm *VM) GetBlock(_ context.Context, blkID ids.ID) (snowman.Block, error) {
+func (vm *VM) GetBlock(blkID ids.ID) (snowman.Block, error) {
 	return vm.manager.GetBlock(blkID)
 }
 
 // LastAccepted returns the block most recently accepted
-func (vm *VM) LastAccepted(context.Context) (ids.ID, error) {
+func (vm *VM) LastAccepted() (ids.ID, error) {
 	return vm.manager.LastAccepted(), nil
 }
 
 // SetPreference sets the preferred block to be the one with ID [blkID]
-func (vm *VM) SetPreference(_ context.Context, blkID ids.ID) error {
+func (vm *VM) SetPreference(blkID ids.ID) error {
 	vm.Builder.SetPreference(blkID)
 	return nil
 }
 
-func (*VM) Version(context.Context) (string, error) {
+func (vm *VM) Version() (string, error) {
 	return version.Current.String(), nil
 }
 
 // CreateHandlers returns a map where:
 // * keys are API endpoint extensions
 // * values are API handlers
-func (vm *VM) CreateHandlers(context.Context) (map[string]*common.HTTPHandler, error) {
+func (vm *VM) CreateHandlers() (map[string]*common.HTTPHandler, error) {
 	server := rpc.NewServer()
 	server.RegisterCodec(json.NewCodec(), "application/json")
 	server.RegisterCodec(json.NewCodec(), "application/json;charset=UTF-8")
@@ -420,7 +418,7 @@ func (vm *VM) CreateHandlers(context.Context) (map[string]*common.HTTPHandler, e
 // CreateStaticHandlers returns a map where:
 // * keys are API endpoint extensions
 // * values are API handlers
-func (*VM) CreateStaticHandlers(context.Context) (map[string]*common.HTTPHandler, error) {
+func (vm *VM) CreateStaticHandlers() (map[string]*common.HTTPHandler, error) {
 	server := rpc.NewServer()
 	server.RegisterCodec(json.NewCodec(), "application/json")
 	server.RegisterCodec(json.NewCodec(), "application/json;charset=UTF-8")
@@ -436,11 +434,11 @@ func (*VM) CreateStaticHandlers(context.Context) (map[string]*common.HTTPHandler
 	}, nil
 }
 
-func (vm *VM) Connected(_ context.Context, vdrID ids.NodeID, _ *version.Application) error {
+func (vm *VM) Connected(vdrID ids.NodeID, _ *version.Application) error {
 	return vm.uptimeManager.Connect(vdrID)
 }
 
-func (vm *VM) Disconnected(_ context.Context, vdrID ids.NodeID) error {
+func (vm *VM) Disconnected(vdrID ids.NodeID) error {
 	if err := vm.uptimeManager.Disconnect(vdrID); err != nil {
 		return err
 	}
@@ -449,7 +447,7 @@ func (vm *VM) Disconnected(_ context.Context, vdrID ids.NodeID) error {
 
 // GetValidatorSet returns the validator set at the specified height for the
 // provided subnetID.
-func (vm *VM) GetValidatorSet(ctx context.Context, height uint64, subnetID ids.ID) (map[ids.NodeID]uint64, error) {
+func (vm *VM) GetValidatorSet(height uint64, subnetID ids.ID) (map[ids.NodeID]uint64, error) {
 	validatorSetsCache, exists := vm.validatorSetCaches[subnetID]
 	if !exists {
 		validatorSetsCache = &cache.LRU{Size: validatorSetsCacheSize}
@@ -468,7 +466,7 @@ func (vm *VM) GetValidatorSet(ctx context.Context, height uint64, subnetID ids.I
 		return validatorSet, nil
 	}
 
-	lastAcceptedHeight, err := vm.GetCurrentHeight(ctx)
+	lastAcceptedHeight, err := vm.GetCurrentHeight()
 	if err != nil {
 		return nil, err
 	}
@@ -543,36 +541,23 @@ func (vm *VM) GetValidatorSet(ctx context.Context, height uint64, subnetID ids.I
 // in the case of a process restart, we default to the lastAccepted block's
 // height which is likely (but not guaranteed) to also be older than the
 // window's configured TTL.
-//
-// If [UseCurrentHeight] is true, we will always return the last accepted block
-// height as the minimum. This is used to trigger the proposervm on recently
-// created subnets before [recentlyAcceptedWindowTTL].
-func (vm *VM) GetMinimumHeight(ctx context.Context) (uint64, error) {
-	if vm.Config.UseCurrentHeight {
-		return vm.GetCurrentHeight(ctx)
-	}
-
+func (vm *VM) GetMinimumHeight() (uint64, error) {
 	oldest, ok := vm.recentlyAccepted.Oldest()
 	if !ok {
-		return vm.GetCurrentHeight(ctx)
+		return vm.GetCurrentHeight()
 	}
 
-	blk, err := vm.manager.GetBlock(oldest)
+	blk, err := vm.GetBlock(oldest)
 	if err != nil {
 		return 0, err
 	}
 
-	// We subtract 1 from the height of [oldest] because we want the height of
-	// the last block accepted before the [recentlyAccepted] window.
-	//
-	// There is guaranteed to be a block accepted before this window because the
-	// first block added to [recentlyAccepted] window is >= height 1.
 	return blk.Height() - 1, nil
 }
 
 // GetCurrentHeight returns the height of the last accepted block
-func (vm *VM) GetCurrentHeight(context.Context) (uint64, error) {
-	lastAccepted, err := vm.manager.GetBlock(vm.state.GetLastAccepted())
+func (vm *VM) GetCurrentHeight() (uint64, error) {
+	lastAccepted, err := vm.GetBlock(vm.state.GetLastAccepted())
 	if err != nil {
 		return 0, err
 	}
@@ -604,17 +589,11 @@ func (vm *VM) updateValidators() error {
 	return nil
 }
 
-func (vm *VM) CodecRegistry() codec.Registry {
-	return vm.codecRegistry
-}
+func (vm *VM) CodecRegistry() codec.Registry { return vm.codecRegistry }
 
-func (vm *VM) Clock() *mockable.Clock {
-	return &vm.clock
-}
+func (vm *VM) Clock() *mockable.Clock { return &vm.clock }
 
-func (vm *VM) Logger() logging.Logger {
-	return vm.ctx.Log
-}
+func (vm *VM) Logger() logging.Logger { return vm.ctx.Log }
 
 // Returns the percentage of the total stake of the subnet connected to this
 // node.

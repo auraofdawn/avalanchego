@@ -222,7 +222,7 @@ func (s *Server) Apply(
 		}
 	}
 
-	if err := parseRequests(apply.requests, req.Requests); err != nil {
+	if err := s.parseRequests(apply.requests, req.Requests); err != nil {
 		delete(s.apply, req.Id)
 		return nil, err
 	}
@@ -249,7 +249,7 @@ func (s *Server) Apply(
 	return &sharedmemorypb.ApplyResponse{}, s.sm.Apply(apply.requests, batches...)
 }
 
-func parseRequests(
+func (s *Server) parseRequests(
 	requests map[ids.ID]*atomic.Requests,
 	rawRequests []*sharedmemorypb.AtomicRequest,
 ) error {

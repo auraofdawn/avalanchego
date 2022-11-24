@@ -49,7 +49,6 @@ import (
 	"github.com/ava-labs/avalanchego/utils/timer"
 	"github.com/ava-labs/avalanchego/vms"
 	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
-	"github.com/ava-labs/avalanchego/vms/proposervm"
 )
 
 const (
@@ -382,8 +381,8 @@ func getNetworkConfig(v *viper.Viper, halflife time.Duration) (network.Config, e
 		},
 
 		DialerConfig: dialer.Config{
-			ThrottleRps:       v.GetUint32(OutboundConnectionThrottlingRpsKey),
-			ConnectionTimeout: v.GetDuration(OutboundConnectionTimeoutKey),
+			ThrottleRps:       v.GetUint32(OutboundConnectionThrottlingRps),
+			ConnectionTimeout: v.GetDuration(OutboundConnectionTimeout),
 		},
 
 		TLSKeyLogFile: v.GetString(NetworkTLSKeyLogFileKey),
@@ -428,7 +427,7 @@ func getNetworkConfig(v *viper.Viper, halflife time.Duration) (network.Config, e
 	case config.HealthConfig.MaxPortionSendQueueBytesFull < 0 || config.HealthConfig.MaxPortionSendQueueBytesFull > 1:
 		return network.Config{}, fmt.Errorf("%s must be in [0,1]", NetworkHealthMaxPortionSendQueueFillKey)
 	case config.DialerConfig.ConnectionTimeout < 0:
-		return network.Config{}, fmt.Errorf("%q must be >= 0", OutboundConnectionTimeoutKey)
+		return network.Config{}, fmt.Errorf("%q must be >= 0", OutboundConnectionTimeout)
 	case config.PeerListGossipFreq < 0:
 		return network.Config{}, fmt.Errorf("%s must be >= 0", NetworkPeerListGossipFreqKey)
 	case config.MaxReconnectDelay < 0:
@@ -915,25 +914,25 @@ func getDatabaseConfig(v *viper.Viper, networkID uint32) (node.DatabaseConfig, e
 	}, nil
 }
 
-func getAliases(v *viper.Viper, name string, contentKey string, fileKey string) (map[ids.ID][]string, error) {
+func getVMAliases(v *viper.Viper) (map[ids.ID][]string, error) {
 	var fileBytes []byte
-	if v.IsSet(contentKey) {
+	if v.IsSet(VMAliasesContentKey) {
 		var err error
-		aliasFlagContent := v.GetString(contentKey)
+		aliasFlagContent := v.GetString(VMAliasesContentKey)
 		fileBytes, err = base64.StdEncoding.DecodeString(aliasFlagContent)
 		if err != nil {
-			return nil, fmt.Errorf("unable to decode base64 content for %s: %w", name, err)
+			return nil, fmt.Errorf("unable to decode base64 content: %w", err)
 		}
 	} else {
-		aliasFilePath := filepath.Clean(GetExpandedArg(v, fileKey))
+		aliasFilePath := filepath.Clean(v.GetString(VMAliasesFileKey))
 		exists, err := storage.FileExists(aliasFilePath)
 		if err != nil {
 			return nil, err
 		}
 
 		if !exists {
-			if v.IsSet(fileKey) {
-				return nil, fmt.Errorf("%s file does not exist in %v", name, aliasFilePath)
+			if v.IsSet(VMAliasesFileKey) {
+				return nil, fmt.Errorf("vm alias file does not exist in %v", aliasFilePath)
 			}
 			return nil, nil
 		}
@@ -944,19 +943,11 @@ func getAliases(v *viper.Viper, name string, contentKey string, fileKey string) 
 		}
 	}
 
-	aliasMap := make(map[ids.ID][]string)
-	if err := json.Unmarshal(fileBytes, &aliasMap); err != nil {
-		return nil, fmt.Errorf("problem unmarshaling %s: %w", name, err)
+	vmAliasMap := make(map[ids.ID][]string)
+	if err := json.Unmarshal(fileBytes, &vmAliasMap); err != nil {
+		return nil, fmt.Errorf("problem unmarshaling vmAliases: %w", err)
 	}
-	return aliasMap, nil
-}
-
-func getVMAliases(v *viper.Viper) (map[ids.ID][]string, error) {
-	return getAliases(v, "vm aliases", VMAliasesContentKey, VMAliasesFileKey)
-}
-
-func getChainAliases(v *viper.Viper) (map[ids.ID][]string, error) {
-	return getAliases(v, "chain aliases", ChainAliasesContentKey, ChainAliasesFileKey)
+	return vmAliasMap, nil
 }
 
 func getVMManager(v *viper.Viper) (vms.Manager, error) {
@@ -1154,10 +1145,9 @@ func parseSubnetConfigs(data []byte, defaultSubnetConfig chains.SubnetConfig) (c
 
 func getDefaultSubnetConfig(v *viper.Viper) chains.SubnetConfig {
 	return chains.SubnetConfig{
-		ConsensusParameters:   getConsensusConfig(v),
-		ValidatorOnly:         false,
-		GossipConfig:          getGossipConfig(v),
-		ProposerMinBlockDelay: proposervm.DefaultMinBlockDelay,
+		ConsensusParameters: getConsensusConfig(v),
+		ValidatorOnly:       false,
+		GossipConfig:        getGossipConfig(v),
 	}
 }
 
@@ -1264,8 +1254,6 @@ func GetNodeConfig(v *viper.Viper, buildDir string) (node.Config, error) {
 	if nodeConfig.ConsensusGossipFrequency < 0 {
 		return node.Config{}, fmt.Errorf("%s must be >= 0", ConsensusGossipFrequencyKey)
 	}
-
-	nodeConfig.UseCurrentHeight = v.GetBool(ProposerVMUseCurrentHeightKey)
 
 	var err error
 	// Logging
@@ -1408,11 +1396,6 @@ func GetNodeConfig(v *viper.Viper, buildDir string) (node.Config, error) {
 	if err != nil {
 		return node.Config{}, err
 	}
-	// Chain aliases
-	nodeConfig.ChainAliases, err = getChainAliases(v)
-	if err != nil {
-		return node.Config{}, err
-	}
 
 	nodeConfig.SystemTrackerFrequency = v.GetDuration(SystemTrackerFrequencyKey)
 	nodeConfig.SystemTrackerProcessingHalflife = v.GetDuration(SystemTrackerProcessingHalflifeKey)
@@ -1435,12 +1418,7 @@ func GetNodeConfig(v *viper.Viper, buildDir string) (node.Config, error) {
 	}
 
 	nodeConfig.TraceConfig, err = getTraceConfig(v)
-	if err != nil {
-		return node.Config{}, err
-	}
-
-	nodeConfig.ProvidedFlags = providedFlags(v)
-	return nodeConfig, nil
+	return nodeConfig, err
 }
 
 // calcMinConnectedStake takes [consensusParams] as input and calculates the
@@ -1450,15 +1428,4 @@ func calcMinConnectedStake(consensusParams snowball.Parameters) float64 {
 	k := consensusParams.K
 	r := float64(alpha) / float64(k)
 	return r*(1-constants.MinConnectedStakeBuffer) + constants.MinConnectedStakeBuffer
-}
-
-func providedFlags(v *viper.Viper) map[string]interface{} {
-	settings := v.AllSettings()
-	customSettings := make(map[string]interface{}, len(settings))
-	for key, val := range settings {
-		if v.IsSet(key) {
-			customSettings[key] = val
-		}
-	}
-	return customSettings
 }

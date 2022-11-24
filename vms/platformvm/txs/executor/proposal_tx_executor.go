@@ -63,29 +63,14 @@ type ProposalTxExecutor struct {
 	PrefersCommit bool
 }
 
-func (*ProposalTxExecutor) CreateChainTx(*txs.CreateChainTx) error {
-	return errWrongTxType
-}
-
-func (*ProposalTxExecutor) CreateSubnetTx(*txs.CreateSubnetTx) error {
-	return errWrongTxType
-}
-
-func (*ProposalTxExecutor) ImportTx(*txs.ImportTx) error {
-	return errWrongTxType
-}
-
-func (*ProposalTxExecutor) ExportTx(*txs.ExportTx) error {
-	return errWrongTxType
-}
-
+func (*ProposalTxExecutor) CreateChainTx(*txs.CreateChainTx) error   { return errWrongTxType }
+func (*ProposalTxExecutor) CreateSubnetTx(*txs.CreateSubnetTx) error { return errWrongTxType }
+func (*ProposalTxExecutor) ImportTx(*txs.ImportTx) error             { return errWrongTxType }
+func (*ProposalTxExecutor) ExportTx(*txs.ExportTx) error             { return errWrongTxType }
 func (*ProposalTxExecutor) RemoveSubnetValidatorTx(*txs.RemoveSubnetValidatorTx) error {
 	return errWrongTxType
 }
-
-func (*ProposalTxExecutor) TransformSubnetTx(*txs.TransformSubnetTx) error {
-	return errWrongTxType
-}
+func (*ProposalTxExecutor) TransformSubnetTx(*txs.TransformSubnetTx) error { return errWrongTxType }
 
 func (*ProposalTxExecutor) AddPermissionlessValidatorTx(*txs.AddPermissionlessValidatorTx) error {
 	return errWrongTxType
@@ -127,11 +112,7 @@ func (e *ProposalTxExecutor) AddValidatorTx(tx *txs.AddValidatorTx) error {
 	// Produce the UTXOs
 	utxo.Produce(e.OnCommitState, txID, tx.Outs)
 
-	newStaker, err := state.NewPendingStaker(txID, tx)
-	if err != nil {
-		return err
-	}
-
+	newStaker := state.NewPendingStaker(txID, tx)
 	e.OnCommitState.PutPendingValidator(newStaker)
 
 	// Set up the state if this tx is aborted
@@ -175,11 +156,7 @@ func (e *ProposalTxExecutor) AddSubnetValidatorTx(tx *txs.AddSubnetValidatorTx) 
 	// Produce the UTXOs
 	utxo.Produce(e.OnCommitState, txID, tx.Outs)
 
-	newStaker, err := state.NewPendingStaker(txID, tx)
-	if err != nil {
-		return err
-	}
-
+	newStaker := state.NewPendingStaker(txID, tx)
 	e.OnCommitState.PutPendingValidator(newStaker)
 
 	// Set up the state if this tx is aborted
@@ -224,11 +201,7 @@ func (e *ProposalTxExecutor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
 	// Produce the UTXOs
 	utxo.Produce(e.OnCommitState, txID, tx.Outs)
 
-	newStaker, err := state.NewPendingStaker(txID, tx)
-	if err != nil {
-		return err
-	}
-
+	newStaker := state.NewPendingStaker(txID, tx)
 	e.OnCommitState.PutPendingDelegator(newStaker)
 
 	// Set up the state if this tx is aborted

@@ -4,7 +4,6 @@
 package bootstrap
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -28,8 +27,8 @@ type txParser struct {
 	vm                      vertex.DAGVM
 }
 
-func (p *txParser) Parse(ctx context.Context, txBytes []byte) (queue.Job, error) {
-	tx, err := p.vm.ParseTx(ctx, txBytes)
+func (p *txParser) Parse(txBytes []byte) (queue.Job, error) {
+	tx, err := p.vm.ParseTx(txBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -47,11 +46,8 @@ type txJob struct {
 	tx                      snowstorm.Tx
 }
 
-func (t *txJob) ID() ids.ID {
-	return t.tx.ID()
-}
-
-func (t *txJob) MissingDependencies(context.Context) (ids.Set, error) {
+func (t *txJob) ID() ids.ID { return t.tx.ID() }
+func (t *txJob) MissingDependencies() (ids.Set, error) {
 	missing := ids.Set{}
 	deps, err := t.tx.Dependencies()
 	if err != nil {
@@ -66,7 +62,7 @@ func (t *txJob) MissingDependencies(context.Context) (ids.Set, error) {
 }
 
 // Returns true if this tx job has at least 1 missing dependency
-func (t *txJob) HasMissingDependencies(context.Context) (bool, error) {
+func (t *txJob) HasMissingDependencies() (bool, error) {
 	deps, err := t.tx.Dependencies()
 	if err != nil {
 		return false, err
@@ -79,8 +75,8 @@ func (t *txJob) HasMissingDependencies(context.Context) (bool, error) {
 	return false, nil
 }
 
-func (t *txJob) Execute(ctx context.Context) error {
-	hasMissingDeps, err := t.HasMissingDependencies(ctx)
+func (t *txJob) Execute() error {
+	hasMissingDeps, err := t.HasMissingDependencies()
 	if err != nil {
 		return err
 	}
@@ -96,7 +92,7 @@ func (t *txJob) Execute(ctx context.Context) error {
 		return fmt.Errorf("attempting to execute transaction with status %s", status)
 	case choices.Processing:
 		txID := t.tx.ID()
-		if err := t.tx.Verify(ctx); err != nil {
+		if err := t.tx.Verify(); err != nil {
 			t.log.Error("transaction failed verification during bootstrapping",
 				zap.Stringer("txID", txID),
 				zap.Error(err),
@@ -108,7 +104,7 @@ func (t *txJob) Execute(ctx context.Context) error {
 		t.log.Trace("accepting transaction in bootstrapping",
 			zap.Stringer("txID", txID),
 		)
-		if err := t.tx.Accept(ctx); err != nil {
+		if err := t.tx.Accept(); err != nil {
 			t.log.Error("transaction failed to accept during bootstrapping",
 				zap.Stringer("txID", txID),
 				zap.Error(err),
@@ -118,7 +114,4 @@ func (t *txJob) Execute(ctx context.Context) error {
 	}
 	return nil
 }
-
-func (t *txJob) Bytes() []byte {
-	return t.tx.Bytes()
-}
+func (t *txJob) Bytes() []byte { return t.tx.Bytes() }

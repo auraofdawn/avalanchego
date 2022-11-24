@@ -4,7 +4,6 @@
 package choices
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/ava-labs/avalanchego/ids"
@@ -19,14 +18,12 @@ type TestDecidable struct {
 	StatusV          Status
 }
 
-func (d *TestDecidable) ID() ids.ID {
-	return d.IDV
-}
+func (d *TestDecidable) ID() ids.ID { return d.IDV }
 
-func (d *TestDecidable) Accept(context.Context) error {
+func (d *TestDecidable) Accept() error {
 	switch d.StatusV {
 	case Unknown, Rejected:
-		return fmt.Errorf("invalid state transition from %s to %s",
+		return fmt.Errorf("invalid state transaition from %s to %s",
 			d.StatusV, Accepted)
 	default:
 		d.StatusV = Accepted
@@ -34,10 +31,10 @@ func (d *TestDecidable) Accept(context.Context) error {
 	}
 }
 
-func (d *TestDecidable) Reject(context.Context) error {
+func (d *TestDecidable) Reject() error {
 	switch d.StatusV {
 	case Unknown, Accepted:
-		return fmt.Errorf("invalid state transition from %s to %s",
+		return fmt.Errorf("invalid state transaition from %s to %s",
 			d.StatusV, Rejected)
 	default:
 		d.StatusV = Rejected
@@ -45,6 +42,4 @@ func (d *TestDecidable) Reject(context.Context) error {
 	}
 }
 
-func (d *TestDecidable) Status() Status {
-	return d.StatusV
-}
+func (d *TestDecidable) Status() Status { return d.StatusV }

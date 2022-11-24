@@ -4,7 +4,6 @@
 package platformvm
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -27,7 +26,6 @@ import (
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/components/keystore"
 	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
-	"github.com/ava-labs/avalanchego/vms/platformvm/signer"
 	"github.com/ava-labs/avalanchego/vms/platformvm/stakeable"
 	"github.com/ava-labs/avalanchego/vms/platformvm/status"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
@@ -82,13 +80,12 @@ type GetHeightResponse struct {
 }
 
 // GetHeight returns the height of the last accepted block
-func (service *Service) GetHeight(r *http.Request, _ *struct{}, response *GetHeightResponse) error {
-	ctx := r.Context()
-	lastAcceptedID, err := service.vm.LastAccepted(ctx)
+func (service *Service) GetHeight(r *http.Request, args *struct{}, response *GetHeightResponse) error {
+	lastAcceptedID, err := service.vm.LastAccepted()
 	if err != nil {
 		return fmt.Errorf("couldn't get last accepted block ID: %w", err)
 	}
-	lastAccepted, err := service.vm.GetBlock(ctx, lastAcceptedID)
+	lastAccepted, err := service.vm.GetBlock(lastAcceptedID)
 	if err != nil {
 		return fmt.Errorf("couldn't get last accepted block: %w", err)
 	}
@@ -109,7 +106,7 @@ type ExportKeyReply struct {
 }
 
 // ExportKey returns a private key from the provided user
-func (service *Service) ExportKey(_ *http.Request, args *ExportKeyArgs, reply *ExportKeyReply) error {
+func (service *Service) ExportKey(r *http.Request, args *ExportKeyArgs, reply *ExportKeyReply) error {
 	service.vm.ctx.Log.Debug("Platform: ExportKey called")
 
 	address, err := avax.ParseServiceAddress(service.addrManager, args.Address)
@@ -139,7 +136,7 @@ type ImportKeyArgs struct {
 }
 
 // ImportKey adds a private key to the provided user
-func (service *Service) ImportKey(_ *http.Request, args *ImportKeyArgs, reply *api.JSONAddress) error {
+func (service *Service) ImportKey(r *http.Request, args *ImportKeyArgs, reply *api.JSONAddress) error {
 	service.vm.ctx.Log.Debug("Platform: ImportKey called",
 		logging.UserString("username", args.Username),
 	)
@@ -767,7 +764,7 @@ func (service *Service) GetCurrentValidators(_ *http.Request, args *GetCurrentVa
 				}
 			}
 
-			vdr := platformapi.PermissionlessValidator{
+			reply.Validators = append(reply.Validators, platformapi.PermissionlessValidator{
 				Staker: platformapi.Staker{
 					TxID:        txID,
 					NodeID:      nodeID,
@@ -782,16 +779,7 @@ func (service *Service) GetCurrentValidators(_ *http.Request, args *GetCurrentVa
 				ValidationRewardOwner: validationRewardOwner,
 				DelegationRewardOwner: delegationRewardOwner,
 				DelegationFee:         delegationFee,
-			}
-
-			if staker, ok := staker.(*txs.AddPermissionlessValidatorTx); ok {
-				if signer, ok := staker.Signer.(*signer.ProofOfPossession); ok {
-					vdr.Signer = signer
-				}
-			}
-
-			reply.Validators = append(reply.Validators, vdr)
-
+			})
 		case txs.DelegatorTx:
 			var rewardOwner *platformapi.Owner
 			owner, ok := staker.RewardsOwner().(*secp256k1fx.OutputOwners)
@@ -915,7 +903,7 @@ func (service *Service) GetPendingValidators(_ *http.Request, args *GetPendingVa
 
 			connected := service.vm.uptimeManager.IsConnected(nodeID)
 			tracksSubnet := args.SubnetID == constants.PrimaryNetworkID || service.vm.SubnetTracker.TracksSubnet(nodeID, args.SubnetID)
-			vdr := platformapi.PermissionlessValidator{
+			reply.Validators = append(reply.Validators, platformapi.PermissionlessValidator{
 				Staker: platformapi.Staker{
 					TxID:        txID,
 					NodeID:      nodeID,
@@ -925,15 +913,7 @@ func (service *Service) GetPendingValidators(_ *http.Request, args *GetPendingVa
 				},
 				DelegationFee: delegationFee,
 				Connected:     connected && tracksSubnet,
-			}
-
-			if staker, ok := staker.(*txs.AddPermissionlessValidatorTx); ok {
-				if signer, ok := staker.Signer.(*signer.ProofOfPossession); ok {
-					vdr.Signer = signer
-				}
-			}
-
-			reply.Validators = append(reply.Validators, vdr)
+			})
 
 		case txs.DelegatorTx:
 			reply.Delegators = append(reply.Delegators, platformapi.Staker{
@@ -1715,7 +1695,7 @@ type GetBlockchainStatusReply struct {
 }
 
 // GetBlockchainStatus gets the status of a blockchain with the ID [args.BlockchainID].
-func (service *Service) GetBlockchainStatus(r *http.Request, args *GetBlockchainStatusArgs, reply *GetBlockchainStatusReply) error {
+func (service *Service) GetBlockchainStatus(_ *http.Request, args *GetBlockchainStatusArgs, reply *GetBlockchainStatusReply) error {
 	service.vm.ctx.Log.Debug("Platform: GetBlockchainStatus called")
 
 	if args.BlockchainID == "" {
@@ -1738,13 +1718,12 @@ func (service *Service) GetBlockchainStatus(r *http.Request, args *GetBlockchain
 		return fmt.Errorf("problem parsing blockchainID %q: %w", args.BlockchainID, err)
 	}
 
-	ctx := r.Context()
-	lastAcceptedID, err := service.vm.LastAccepted(ctx)
+	lastAcceptedID, err := service.vm.LastAccepted()
 	if err != nil {
 		return fmt.Errorf("problem loading last accepted ID: %w", err)
 	}
 
-	exists, err := service.chainExists(ctx, lastAcceptedID, blockchainID)
+	exists, err := service.chainExists(lastAcceptedID, blockchainID)
 	if err != nil {
 		return fmt.Errorf("problem looking up blockchain: %w", err)
 	}
@@ -1757,7 +1736,7 @@ func (service *Service) GetBlockchainStatus(r *http.Request, args *GetBlockchain
 	if err != nil {
 		return fmt.Errorf("could not retrieve preferred block, err %w", err)
 	}
-	preferred, err := service.chainExists(ctx, preferredBlk.ID(), blockchainID)
+	preferred, err := service.chainExists(preferredBlk.ID(), blockchainID)
 	if err != nil {
 		return fmt.Errorf("problem looking up blockchain: %w", err)
 	}
@@ -1788,10 +1767,10 @@ func (service *Service) nodeValidates(blockchainID ids.ID) bool {
 	return validators.Contains(service.vm.ctx.NodeID)
 }
 
-func (service *Service) chainExists(ctx context.Context, blockID ids.ID, chainID ids.ID) (bool, error) {
+func (service *Service) chainExists(blockID ids.ID, chainID ids.ID) (bool, error) {
 	state, ok := service.vm.manager.GetState(blockID)
 	if !ok {
-		block, err := service.vm.GetBlock(ctx, blockID)
+		block, err := service.vm.GetBlock(blockID)
 		if err != nil {
 			return false, err
 		}
@@ -1908,7 +1887,7 @@ type GetBlockchainsResponse struct {
 }
 
 // GetBlockchains returns all of the blockchains that exist
-func (service *Service) GetBlockchains(_ *http.Request, _ *struct{}, response *GetBlockchainsResponse) error {
+func (service *Service) GetBlockchains(_ *http.Request, args *struct{}, response *GetBlockchainsResponse) error {
 	service.vm.ctx.Log.Debug("Platform: GetBlockchains called")
 
 	subnets, err := service.vm.state.GetSubnets()
@@ -2104,6 +2083,58 @@ type GetStakeReply struct {
 	Encoding formatting.Encoding `json:"encoding"`
 }
 
+// Takes in a staker and a set of addresses
+// Returns:
+// 1) The total amount staked by addresses in [addrs]
+// 2) The staked outputs
+func (service *Service) getStakeHelper(tx *txs.Tx, addrs ids.ShortSet, totalAmountStaked map[ids.ID]uint64) []avax.TransferableOutput {
+	staker, ok := tx.Unsigned.(txs.PermissionlessStaker)
+	if !ok {
+		return nil
+	}
+
+	stake := staker.Stake()
+	stakedOuts := make([]avax.TransferableOutput, 0, len(stake))
+	// Go through all of the staked outputs
+	for _, output := range stake {
+		out := output.Out
+		if lockedOut, ok := out.(*stakeable.LockOut); ok {
+			// This output can only be used for staking until [stakeOnlyUntil]
+			out = lockedOut.TransferableOut
+		}
+		secpOut, ok := out.(*secp256k1fx.TransferOutput)
+		if !ok {
+			continue
+		}
+
+		// Check whether this output is owned by one of the given addresses
+		contains := false
+		for _, addr := range secpOut.Addrs {
+			if addrs.Contains(addr) {
+				contains = true
+				break
+			}
+		}
+		if !contains {
+			// This output isn't owned by one of the given addresses. Ignore.
+			continue
+		}
+
+		assetID := output.AssetID()
+		newAmount, err := math.Add64(totalAmountStaked[assetID], secpOut.Amt)
+		if err != nil {
+			newAmount = stdmath.MaxUint64
+		}
+		totalAmountStaked[assetID] = newAmount
+
+		stakedOuts = append(
+			stakedOuts,
+			*output,
+		)
+	}
+	return stakedOuts
+}
+
 // GetStake returns the amount of nAVAX that [args.Addresses] have cumulatively
 // staked on the Primary Network.
 //
@@ -2142,7 +2173,7 @@ func (service *Service) GetStake(_ *http.Request, args *GetStakeArgs, response *
 			return err
 		}
 
-		stakedOuts = append(stakedOuts, getStakeHelper(tx, addrs, totalAmountStaked)...)
+		stakedOuts = append(stakedOuts, service.getStakeHelper(tx, addrs, totalAmountStaked)...)
 	}
 
 	pendingStakerIterator, err := service.vm.state.GetPendingStakerIterator()
@@ -2159,7 +2190,7 @@ func (service *Service) GetStake(_ *http.Request, args *GetStakeArgs, response *
 			return err
 		}
 
-		stakedOuts = append(stakedOuts, getStakeHelper(tx, addrs, totalAmountStaked)...)
+		stakedOuts = append(stakedOuts, service.getStakeHelper(tx, addrs, totalAmountStaked)...)
 	}
 
 	response.Stakeds = newJSONBalanceMap(totalAmountStaked)
@@ -2341,7 +2372,7 @@ type GetTimestampReply struct {
 }
 
 // GetTimestamp returns the current timestamp on chain.
-func (service *Service) GetTimestamp(_ *http.Request, _ *struct{}, reply *GetTimestampReply) error {
+func (service *Service) GetTimestamp(_ *http.Request, args *struct{}, reply *GetTimestampReply) error {
 	service.vm.ctx.Log.Debug("Platform: GetTimestamp called")
 
 	reply.Timestamp = service.vm.state.GetTimestamp()
@@ -2361,16 +2392,15 @@ type GetValidatorsAtReply struct {
 
 // GetValidatorsAt returns the weights of the validator set of a provided subnet
 // at the specified height.
-func (service *Service) GetValidatorsAt(r *http.Request, args *GetValidatorsAtArgs, reply *GetValidatorsAtReply) error {
+func (service *Service) GetValidatorsAt(_ *http.Request, args *GetValidatorsAtArgs, reply *GetValidatorsAtReply) error {
 	height := uint64(args.Height)
 	service.vm.ctx.Log.Debug("Platform: GetValidatorsAt called",
 		zap.Uint64("height", height),
 		zap.Stringer("subnetID", args.SubnetID),
 	)
 
-	ctx := r.Context()
 	var err error
-	reply.Validators, err = service.vm.GetValidatorSet(ctx, height, args.SubnetID)
+	reply.Validators, err = service.vm.GetValidatorSet(height, args.SubnetID)
 	if err != nil {
 		return fmt.Errorf("couldn't get validator set: %w", err)
 	}
@@ -2401,56 +2431,4 @@ func (service *Service) GetBlock(_ *http.Request, args *api.GetBlockArgs, respon
 	}
 
 	return nil
-}
-
-// Takes in a staker and a set of addresses
-// Returns:
-// 1) The total amount staked by addresses in [addrs]
-// 2) The staked outputs
-func getStakeHelper(tx *txs.Tx, addrs ids.ShortSet, totalAmountStaked map[ids.ID]uint64) []avax.TransferableOutput {
-	staker, ok := tx.Unsigned.(txs.PermissionlessStaker)
-	if !ok {
-		return nil
-	}
-
-	stake := staker.Stake()
-	stakedOuts := make([]avax.TransferableOutput, 0, len(stake))
-	// Go through all of the staked outputs
-	for _, output := range stake {
-		out := output.Out
-		if lockedOut, ok := out.(*stakeable.LockOut); ok {
-			// This output can only be used for staking until [stakeOnlyUntil]
-			out = lockedOut.TransferableOut
-		}
-		secpOut, ok := out.(*secp256k1fx.TransferOutput)
-		if !ok {
-			continue
-		}
-
-		// Check whether this output is owned by one of the given addresses
-		contains := false
-		for _, addr := range secpOut.Addrs {
-			if addrs.Contains(addr) {
-				contains = true
-				break
-			}
-		}
-		if !contains {
-			// This output isn't owned by one of the given addresses. Ignore.
-			continue
-		}
-
-		assetID := output.AssetID()
-		newAmount, err := math.Add64(totalAmountStaked[assetID], secpOut.Amt)
-		if err != nil {
-			newAmount = stdmath.MaxUint64
-		}
-		totalAmountStaked[assetID] = newAmount
-
-		stakedOuts = append(
-			stakedOuts,
-			*output,
-		)
-	}
-	return stakedOuts
 }

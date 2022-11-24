@@ -4,12 +4,8 @@
 package snowman
 
 import (
-	"context"
-
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
 )
-
-var _ snowman.Block = (*memoryBlock)(nil)
 
 // memoryBlock wraps a snowman Block to manage non-verified blocks
 type memoryBlock struct {
@@ -20,15 +16,15 @@ type memoryBlock struct {
 }
 
 // Accept accepts the underlying block & removes sibling subtrees
-func (mb *memoryBlock) Accept(ctx context.Context) error {
+func (mb *memoryBlock) Accept() error {
 	mb.tree.RemoveSubtree(mb.Parent())
 	mb.metrics.numNonVerifieds.Set(float64(mb.tree.Len()))
-	return mb.Block.Accept(ctx)
+	return mb.Block.Accept()
 }
 
 // Reject rejects the underlying block & removes child subtrees
-func (mb *memoryBlock) Reject(ctx context.Context) error {
+func (mb *memoryBlock) Reject() error {
 	mb.tree.RemoveSubtree(mb.ID())
 	mb.metrics.numNonVerifieds.Set(float64(mb.tree.Len()))
-	return mb.Block.Reject(ctx)
+	return mb.Block.Reject()
 }

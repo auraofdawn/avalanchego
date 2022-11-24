@@ -61,9 +61,7 @@ func (p *earlyTermNoTraversalPoll) Finished() bool {
 }
 
 // Result returns the result of this poll
-func (p *earlyTermNoTraversalPoll) Result() ids.Bag {
-	return p.votes
-}
+func (p *earlyTermNoTraversalPoll) Result() ids.Bag { return p.votes }
 
 func (p *earlyTermNoTraversalPoll) PrefixedString(prefix string) string {
 	return fmt.Sprintf(
@@ -74,6 +72,4 @@ func (p *earlyTermNoTraversalPoll) PrefixedString(prefix string) string {
 	)
 }
 
-func (p *earlyTermNoTraversalPoll) String() string {
-	return p.PrefixedString("")
-}
+func (p *earlyTermNoTraversalPoll) String() string { return p.PrefixedString("") }

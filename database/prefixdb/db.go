@@ -4,7 +4,6 @@
 package prefixdb
 
 import (
-	"context"
 	"sync"
 
 	"github.com/ava-labs/avalanchego/database"
@@ -35,8 +34,7 @@ type Database struct {
 	// concurrently with another operation. All other operations can hold RLock.
 	lock sync.RWMutex
 	// The underlying storage
-	db     database.Database
-	closed bool
+	db database.Database
 }
 
 // New returns a new prefixed database
@@ -71,7 +69,7 @@ func (db *Database) Has(key []byte) (bool, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	if db.closed {
+	if db.db == nil {
 		return false, database.ErrClosed
 	}
 	prefixedKey := db.prefix(key)
@@ -87,7 +85,7 @@ func (db *Database) Get(key []byte) ([]byte, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	if db.closed {
+	if db.db == nil {
 		return nil, database.ErrClosed
 	}
 	prefixedKey := db.prefix(key)
@@ -104,7 +102,7 @@ func (db *Database) Put(key, value []byte) error {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	if db.closed {
+	if db.db == nil {
 		return database.ErrClosed
 	}
 	prefixedKey := db.prefix(key)
@@ -120,7 +118,7 @@ func (db *Database) Delete(key []byte) error {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	if db.closed {
+	if db.db == nil {
 		return database.ErrClosed
 	}
 	prefixedKey := db.prefix(key)
@@ -154,7 +152,7 @@ func (db *Database) NewIteratorWithStartAndPrefix(start, prefix []byte) database
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	if db.closed {
+	if db.db == nil {
 		return &nodb.Iterator{Err: database.ErrClosed}
 	}
 	prefixedStart := db.prefix(start)
@@ -172,7 +170,7 @@ func (db *Database) Compact(start, limit []byte) error {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	if db.closed {
+	if db.db == nil {
 		return database.ErrClosed
 	}
 	return db.db.Compact(db.prefix(start), db.prefix(limit))
@@ -182,10 +180,10 @@ func (db *Database) Close() error {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
-	if db.closed {
+	if db.db == nil {
 		return database.ErrClosed
 	}
-	db.closed = true
+	db.db = nil
 	return nil
 }
 
@@ -193,17 +191,17 @@ func (db *Database) isClosed() bool {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	return db.closed
+	return db.db == nil
 }
 
-func (db *Database) HealthCheck(ctx context.Context) (interface{}, error) {
+func (db *Database) HealthCheck() (interface{}, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	if db.closed {
+	if db.db == nil {
 		return nil, database.ErrClosed
 	}
-	return db.db.HealthCheck(ctx)
+	return db.db.HealthCheck()
 }
 
 // Return a copy of [key], prepended with this db's prefix.
@@ -269,7 +267,7 @@ func (b *batch) Write() error {
 	b.db.lock.RLock()
 	defer b.db.lock.RUnlock()
 
-	if b.db.closed {
+	if b.db.db == nil {
 		return database.ErrClosed
 	}
 	return b.Batch.Write()
@@ -346,13 +344,9 @@ func (it *iterator) Next() bool {
 	return hasNext
 }
 
-func (it *iterator) Key() []byte {
-	return it.key
-}
+func (it *iterator) Key() []byte { return it.key }
 
-func (it *iterator) Value() []byte {
-	return it.val
-}
+func (it *iterator) Value() []byte { return it.val }
 
 // Error returns [database.ErrClosed] if the underlying db was closed
 // otherwise it returns the normal iterator error.

@@ -11,7 +11,7 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 )
 
-func TestTimeoutManager(*testing.T) {
+func TestTimeoutManager(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	defer wg.Wait()

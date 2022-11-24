@@ -4,7 +4,6 @@
 package state
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -42,7 +41,7 @@ type uniqueVertex struct {
 
 // newUniqueVertex returns a uniqueVertex instance from [b] by checking the cache
 // and then parsing the vertex bytes on a cache miss.
-func newUniqueVertex(ctx context.Context, s *Serializer, b []byte) (*uniqueVertex, error) {
+func newUniqueVertex(s *Serializer, b []byte) (*uniqueVertex, error) {
 	vtx := &uniqueVertex{
 		id:         hashing.ComputeHash256Array(b),
 		serializer: s,
@@ -66,7 +65,7 @@ func newUniqueVertex(ctx context.Context, s *Serializer, b []byte) (*uniqueVerte
 	unparsedTxs := innerVertex.Txs()
 	txs := make([]snowstorm.Tx, len(unparsedTxs))
 	for i, txBytes := range unparsedTxs {
-		tx, err := vtx.serializer.VM.ParseTx(ctx, txBytes)
+		tx, err := vtx.serializer.VM.ParseTx(txBytes)
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +130,7 @@ func (vtx *uniqueVertex) Evict() {
 	}
 }
 
-func (vtx *uniqueVertex) setVertex(ctx context.Context, innerVtx vertex.StatelessVertex) error {
+func (vtx *uniqueVertex) setVertex(innerVtx vertex.StatelessVertex) error {
 	vtx.shallowRefresh()
 	vtx.v.vtx = innerVtx
 
@@ -139,7 +138,7 @@ func (vtx *uniqueVertex) setVertex(ctx context.Context, innerVtx vertex.Stateles
 		return nil
 	}
 
-	if _, err := vtx.Txs(ctx); err != nil {
+	if _, err := vtx.Txs(); err != nil {
 		return err
 	}
 
@@ -166,15 +165,10 @@ func (vtx *uniqueVertex) setStatus(status choices.Status) error {
 	return vtx.serializer.state.SetStatus(vtx.ID(), status)
 }
 
-func (vtx *uniqueVertex) ID() ids.ID {
-	return vtx.id
-}
+func (vtx *uniqueVertex) ID() ids.ID       { return vtx.id }
+func (vtx *uniqueVertex) Key() interface{} { return vtx.id }
 
-func (vtx *uniqueVertex) Key() interface{} {
-	return vtx.id
-}
-
-func (vtx *uniqueVertex) Accept(ctx context.Context) error {
+func (vtx *uniqueVertex) Accept() error {
 	if err := vtx.setStatus(choices.Accepted); err != nil {
 		return err
 	}
@@ -189,7 +183,7 @@ func (vtx *uniqueVertex) Accept(ctx context.Context) error {
 		vtx.serializer.edge.Remove(parent.ID())
 	}
 
-	if err := vtx.serializer.state.SetEdge(vtx.serializer.Edge(ctx)); err != nil {
+	if err := vtx.serializer.state.SetEdge(vtx.serializer.Edge()); err != nil {
 		return fmt.Errorf("failed to set edge while accepting vertex %s due to %w", vtx.id, err)
 	}
 
@@ -200,7 +194,7 @@ func (vtx *uniqueVertex) Accept(ctx context.Context) error {
 	return vtx.serializer.versionDB.Commit()
 }
 
-func (vtx *uniqueVertex) Reject(context.Context) error {
+func (vtx *uniqueVertex) Reject() error {
 	if err := vtx.setStatus(choices.Rejected); err != nil {
 		return err
 	}
@@ -215,10 +209,7 @@ func (vtx *uniqueVertex) Reject(context.Context) error {
 // TODO: run performance test to see if shallow refreshing
 // (which will mean that refresh must be called in Bytes and Verify)
 // improves performance
-func (vtx *uniqueVertex) Status() choices.Status {
-	vtx.refresh()
-	return vtx.v.status
-}
+func (vtx *uniqueVertex) Status() choices.Status { vtx.refresh(); return vtx.v.status }
 
 func (vtx *uniqueVertex) Parents() ([]avalanche.Vertex, error) {
 	vtx.refresh()
@@ -251,7 +242,7 @@ var (
 // "uniqueVertex" itself implements "Verify" regardless of whether the underlying vertex
 // is stop vertex or not. Called before issuing the vertex to the consensus.
 // No vertex should ever be able to refer to a stop vertex in its transitive closure.
-func (vtx *uniqueVertex) Verify(ctx context.Context) error {
+func (vtx *uniqueVertex) Verify() error {
 	// first verify the underlying stateless vertex
 	if err := vtx.v.vtx.Verify(); err != nil {
 		return err
@@ -271,7 +262,7 @@ func (vtx *uniqueVertex) Verify(ctx context.Context) error {
 
 	// MUST error if stop vertex has already been accepted (can't be accepted twice)
 	// regardless of whether the underlying vertex is stop vertex or not
-	stopVtxAccepted, err := vtx.serializer.StopVertexAccepted(ctx)
+	stopVtxAccepted, err := vtx.serializer.StopVertexAccepted()
 	if err != nil {
 		return err
 	}
@@ -328,7 +319,7 @@ func (vtx *uniqueVertex) Verify(ctx context.Context) error {
 		visitedVtx.Add(curID)
 		transitivePaths.Add(curID)
 
-		txs, err := cur.Txs(ctx)
+		txs, err := cur.Txs()
 		if err != nil {
 			return err
 		}
@@ -354,7 +345,7 @@ func (vtx *uniqueVertex) Verify(ctx context.Context) error {
 	}
 
 	acceptedEdges := ids.NewSet(0)
-	acceptedEdges.Add(vtx.serializer.Edge(ctx)...)
+	acceptedEdges.Add(vtx.serializer.Edge()...)
 
 	// stop vertex should be able to reach all IDs
 	// that are returned by the "Edge"
@@ -378,7 +369,7 @@ func (vtx *uniqueVertex) HasWhitelist() bool {
 
 // "uniqueVertex" itself implements "Whitelist" traversal iff its underlying
 // "vertex.StatelessVertex" is marked as a stop vertex.
-func (vtx *uniqueVertex) Whitelist(ctx context.Context) (ids.Set, error) {
+func (vtx *uniqueVertex) Whitelist() (ids.Set, error) {
 	if !vtx.v.vtx.StopVertex() {
 		return nil, nil
 	}
@@ -404,7 +395,7 @@ func (vtx *uniqueVertex) Whitelist(ctx context.Context) (ids.Set, error) {
 		}
 		visitedVtx.Add(curID)
 
-		txs, err := cur.Txs(ctx)
+		txs, err := cur.Txs()
 		if err != nil {
 			return nil, err
 		}
@@ -442,7 +433,7 @@ func (vtx *uniqueVertex) Epoch() (uint32, error) {
 	return vtx.v.vtx.Epoch(), nil
 }
 
-func (vtx *uniqueVertex) Txs(ctx context.Context) ([]snowstorm.Tx, error) {
+func (vtx *uniqueVertex) Txs() ([]snowstorm.Tx, error) {
 	vtx.refresh()
 
 	if vtx.v.vtx == nil {
@@ -453,7 +444,7 @@ func (vtx *uniqueVertex) Txs(ctx context.Context) ([]snowstorm.Tx, error) {
 	if len(txs) != len(vtx.v.txs) {
 		vtx.v.txs = make([]snowstorm.Tx, len(txs))
 		for i, txBytes := range txs {
-			tx, err := vtx.serializer.VM.ParseTx(ctx, txBytes)
+			tx, err := vtx.serializer.VM.ParseTx(txBytes)
 			if err != nil {
 				return nil, err
 			}
@@ -464,9 +455,7 @@ func (vtx *uniqueVertex) Txs(ctx context.Context) ([]snowstorm.Tx, error) {
 	return vtx.v.txs, nil
 }
 
-func (vtx *uniqueVertex) Bytes() []byte {
-	return vtx.v.vtx.Bytes()
-}
+func (vtx *uniqueVertex) Bytes() []byte { return vtx.v.vtx.Bytes() }
 
 func (vtx *uniqueVertex) String() string {
 	sb := strings.Builder{}
@@ -476,7 +465,7 @@ func (vtx *uniqueVertex) String() string {
 		sb.WriteString(fmt.Sprintf("Vertex(ID = %s, Error=error while retrieving vertex parents: %s)", vtx.ID(), err))
 		return sb.String()
 	}
-	txs, err := vtx.Txs(context.Background())
+	txs, err := vtx.Txs()
 	if err != nil {
 		sb.WriteString(fmt.Sprintf("Vertex(ID = %s, Error=error while retrieving vertex txs: %s)", vtx.ID(), err))
 		return sb.String()

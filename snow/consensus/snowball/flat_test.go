@@ -11,6 +11,8 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 )
 
+func TestFlatParams(t *testing.T) { ParamsTest(t, FlatFactory{}) }
+
 func TestFlat(t *testing.T) {
 	require := require.New(t)
 

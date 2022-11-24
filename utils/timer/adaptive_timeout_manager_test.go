@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/message"
 )
 
 // Test that Initialize works
@@ -124,14 +125,14 @@ func TestAdaptiveTimeoutManager(t *testing.T) {
 
 		numSuccessful--
 		if numSuccessful > 0 {
-			tm.Put(ids.RequestID{Op: byte(numSuccessful)}, true, *callback)
+			tm.Put(ids.RequestID{Op: byte(numSuccessful)}, message.PullQuery, *callback)
 		}
 		if numSuccessful >= 0 {
 			wg.Done()
 		}
 		if numSuccessful%2 == 0 {
 			tm.Remove(ids.RequestID{Op: byte(numSuccessful)})
-			tm.Put(ids.RequestID{Op: byte(numSuccessful)}, true, *callback)
+			tm.Put(ids.RequestID{Op: byte(numSuccessful)}, message.PullQuery, *callback)
 		}
 	}
 	(*callback)()

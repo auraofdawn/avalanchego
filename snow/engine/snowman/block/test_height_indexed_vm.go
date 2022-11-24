@@ -4,7 +4,6 @@
 package block
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -25,13 +24,13 @@ type TestHeightIndexedVM struct {
 	CantVerifyHeightIndex  bool
 	CantGetBlockIDAtHeight bool
 
-	VerifyHeightIndexF  func(context.Context) error
-	GetBlockIDAtHeightF func(ctx context.Context, height uint64) (ids.ID, error)
+	VerifyHeightIndexF  func() error
+	GetBlockIDAtHeightF func(height uint64) (ids.ID, error)
 }
 
-func (vm *TestHeightIndexedVM) VerifyHeightIndex(ctx context.Context) error {
+func (vm *TestHeightIndexedVM) VerifyHeightIndex() error {
 	if vm.VerifyHeightIndexF != nil {
-		return vm.VerifyHeightIndexF(ctx)
+		return vm.VerifyHeightIndexF()
 	}
 	if vm.CantVerifyHeightIndex && vm.T != nil {
 		vm.T.Fatal(errVerifyHeightIndex)
@@ -39,9 +38,9 @@ func (vm *TestHeightIndexedVM) VerifyHeightIndex(ctx context.Context) error {
 	return errVerifyHeightIndex
 }
 
-func (vm *TestHeightIndexedVM) GetBlockIDAtHeight(ctx context.Context, height uint64) (ids.ID, error) {
+func (vm *TestHeightIndexedVM) GetBlockIDAtHeight(height uint64) (ids.ID, error) {
 	if vm.GetBlockIDAtHeightF != nil {
-		return vm.GetBlockIDAtHeightF(ctx, height)
+		return vm.GetBlockIDAtHeightF(height)
 	}
 	if vm.CantGetBlockIDAtHeight && vm.T != nil {
 		vm.T.Fatal(errGetAncestor)

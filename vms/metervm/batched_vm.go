@@ -4,7 +4,6 @@
 package metervm
 
 import (
-	"context"
 	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
@@ -13,7 +12,6 @@ import (
 )
 
 func (vm *blockVM) GetAncestors(
-	ctx context.Context,
 	blkID ids.ID,
 	maxBlocksNum int,
 	maxBlocksSize int,
@@ -25,7 +23,6 @@ func (vm *blockVM) GetAncestors(
 
 	start := vm.clock.Time()
 	ancestors, err := vm.bVM.GetAncestors(
-		ctx,
 		blkID,
 		maxBlocksNum,
 		maxBlocksSize,
@@ -36,13 +33,13 @@ func (vm *blockVM) GetAncestors(
 	return ancestors, err
 }
 
-func (vm *blockVM) BatchedParseBlock(ctx context.Context, blks [][]byte) ([]snowman.Block, error) {
+func (vm *blockVM) BatchedParseBlock(blks [][]byte) ([]snowman.Block, error) {
 	if vm.bVM == nil {
 		return nil, block.ErrRemoteVMNotImplemented
 	}
 
 	start := vm.clock.Time()
-	blocks, err := vm.bVM.BatchedParseBlock(ctx, blks)
+	blocks, err := vm.bVM.BatchedParseBlock(blks)
 	end := vm.clock.Time()
 	vm.blockMetrics.batchedParseBlock.Observe(float64(end.Sub(start)))
 

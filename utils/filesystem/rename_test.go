@@ -14,12 +14,12 @@ func TestRenameIfExists(t *testing.T) {
 	t.Parallel()
 
 	f, err := os.CreateTemp(os.TempDir(), "test-rename")
-	require.NoError(t, err)
-
+	if err != nil {
+		t.Fatal(err)
+	}
 	a := f.Name()
 	b := a + ".2"
-
-	require.NoError(t, f.Close())
+	f.Close()
 
 	// rename "a" to "b"
 	renamed, err := RenameIfExists(a, b)

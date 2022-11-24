@@ -79,15 +79,6 @@ func TestInterface(t *testing.T) {
 	}
 }
 
-func FuzzInterface(f *testing.F) {
-	for _, test := range database.FuzzTests {
-		db := setupDB(f)
-		test(f, db.client)
-
-		db.closeFn()
-	}
-}
-
 func BenchmarkInterface(b *testing.B) {
 	for _, size := range database.BenchmarkSizes {
 		keys, values := database.SetupBenchmark(b, size[0], size[1], size[2])
@@ -134,7 +125,7 @@ func TestHealthCheck(t *testing.T) {
 			require.NoError(scenario.testFn(db))
 
 			// check db HealthCheck
-			_, err := db.HealthCheck(context.Background())
+			_, err := db.HealthCheck()
 			if err == nil && scenario.wantErr {
 				t.Fatalf("wanted error got nil")
 				return
@@ -146,7 +137,7 @@ func TestHealthCheck(t *testing.T) {
 			require.Nil(err)
 
 			// check rpc HealthCheck
-			_, err = baseDB.client.HealthCheck(context.Background())
+			_, err = baseDB.client.HealthCheck()
 			if err == nil && scenario.wantErr {
 				t.Fatalf("wanted error got nil")
 				return

@@ -4,8 +4,6 @@
 package vertex
 
 import (
-	"context"
-
 	"github.com/ava-labs/avalanchego/snow/consensus/avalanche"
 	"github.com/ava-labs/avalanchego/utils/hashing"
 )
@@ -13,7 +11,7 @@ import (
 // Parser parses bytes into a vertex.
 type Parser interface {
 	// Parse a vertex from a slice of bytes
-	ParseVtx(ctx context.Context, vertex []byte) (avalanche.Vertex, error)
+	ParseVtx(vertex []byte) (avalanche.Vertex, error)
 }
 
 // Parse parses the provided vertex bytes into a stateless vertex

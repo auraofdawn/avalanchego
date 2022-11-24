@@ -4,7 +4,6 @@
 package health
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -61,13 +60,13 @@ func (w *worker) RegisterCheck(name string, checker Checker) error {
 
 func (w *worker) RegisterMonotonicCheck(name string, checker Checker) error {
 	var result utils.AtomicInterface
-	return w.RegisterCheck(name, CheckerFunc(func(ctx context.Context) (interface{}, error) {
+	return w.RegisterCheck(name, CheckerFunc(func() (interface{}, error) {
 		details := result.GetValue()
 		if details != nil {
 			return details, nil
 		}
 
-		details, err := checker.HealthCheck(ctx)
+		details, err := checker.HealthCheck()
 		if err == nil {
 			result.SetValue(details)
 		}
@@ -88,17 +87,17 @@ func (w *worker) Results() (map[string]Result, bool) {
 	return results, healthy
 }
 
-func (w *worker) Start(ctx context.Context, freq time.Duration) {
+func (w *worker) Start(freq time.Duration) {
 	w.startOnce.Do(func() {
 		go func() {
 			ticker := time.NewTicker(freq)
 			defer ticker.Stop()
 
-			w.runChecks(ctx)
+			w.runChecks()
 			for {
 				select {
 				case <-ticker.C:
-					w.runChecks(ctx)
+					w.runChecks()
 				case <-w.closer:
 					return
 				}
@@ -113,7 +112,7 @@ func (w *worker) Stop() {
 	})
 }
 
-func (w *worker) runChecks(ctx context.Context) {
+func (w *worker) runChecks() {
 	w.checksLock.RLock()
 	// Copy the [w.checks] map to collect the checks that we will be running
 	// during this iteration. If [w.checks] is modified during this iteration of
@@ -128,12 +127,12 @@ func (w *worker) runChecks(ctx context.Context) {
 	var wg sync.WaitGroup
 	wg.Add(len(checks))
 	for name, check := range checks {
-		go w.runCheck(ctx, &wg, name, check)
+		go w.runCheck(&wg, name, check)
 	}
 	wg.Wait()
 }
 
-func (w *worker) runCheck(ctx context.Context, wg *sync.WaitGroup, name string, check Checker) {
+func (w *worker) runCheck(wg *sync.WaitGroup, name string, check Checker) {
 	defer wg.Done()
 
 	start := time.Now()
@@ -141,7 +140,7 @@ func (w *worker) runCheck(ctx context.Context, wg *sync.WaitGroup, name string, 
 	// To avoid any deadlocks when [RegisterCheck] is called with a lock
 	// that is grabbed by [check.HealthCheck], we ensure that no locks
 	// are held when [check.HealthCheck] is called.
-	details, err := check.HealthCheck(ctx)
+	details, err := check.HealthCheck()
 	end := time.Now()
 
 	result := Result{

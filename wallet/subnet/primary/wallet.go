@@ -30,13 +30,8 @@ type wallet struct {
 	x x.Wallet
 }
 
-func (w *wallet) P() p.Wallet {
-	return w.p
-}
-
-func (w *wallet) X() x.Wallet {
-	return w.x
-}
+func (w *wallet) P() p.Wallet { return w.p }
+func (w *wallet) X() x.Wallet { return w.x }
 
 // NewWalletFromURI returns a wallet that supports issuing transactions to the
 // chains living in the primary network to a provided [uri].

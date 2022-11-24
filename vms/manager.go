@@ -4,7 +4,6 @@
 package vms
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -43,7 +42,7 @@ type Manager interface {
 
 	// Map [vmID] to [factory]. [factory] creates new instances of the vm whose
 	// ID is [vmID]
-	RegisterFactory(ctx context.Context, vmID ids.ID, factory Factory) error
+	RegisterFactory(vmID ids.ID, factory Factory) error
 
 	// ListFactories returns all the IDs that have had factories registered.
 	ListFactories() ([]ids.ID, error)
@@ -83,7 +82,7 @@ func (m *manager) GetFactory(vmID ids.ID) (Factory, error) {
 	return nil, fmt.Errorf("%q was %w", vmID, ErrNotFound)
 }
 
-func (m *manager) RegisterFactory(ctx context.Context, vmID ids.ID, factory Factory) error {
+func (m *manager) RegisterFactory(vmID ids.ID, factory Factory) error {
 	if _, exists := m.factories[vmID]; exists {
 		return fmt.Errorf("%q was already registered as a vm", vmID)
 	}
@@ -103,15 +102,15 @@ func (m *manager) RegisterFactory(ctx context.Context, vmID ids.ID, factory Fact
 		return nil
 	}
 
-	version, err := commonVM.Version(ctx)
+	version, err := commonVM.Version()
 	if err != nil {
 		// Drop the shutdown error to surface the original error
-		_ = commonVM.Shutdown(ctx)
+		_ = commonVM.Shutdown()
 		return err
 	}
 
 	m.versions[vmID] = version
-	return commonVM.Shutdown(ctx)
+	return commonVM.Shutdown()
 }
 
 func (m *manager) ListFactories() ([]ids.ID, error) {

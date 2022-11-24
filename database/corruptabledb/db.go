@@ -4,7 +4,6 @@
 package corruptabledb
 
 import (
-	"context"
 	"fmt"
 	"sync"
 
@@ -71,15 +70,13 @@ func (db *Database) Compact(start []byte, limit []byte) error {
 	return db.handleError(db.Database.Compact(start, limit))
 }
 
-func (db *Database) Close() error {
-	return db.handleError(db.Database.Close())
-}
+func (db *Database) Close() error { return db.handleError(db.Database.Close()) }
 
-func (db *Database) HealthCheck(ctx context.Context) (interface{}, error) {
+func (db *Database) HealthCheck() (interface{}, error) {
 	if err := db.corrupted(); err != nil {
 		return nil, err
 	}
-	return db.Database.HealthCheck(ctx)
+	return db.Database.HealthCheck()
 }
 
 func (db *Database) NewBatch() database.Batch {

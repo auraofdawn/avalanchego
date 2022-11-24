@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -73,13 +72,9 @@ type bootstrapper struct {
 	// empty. This is to attempt to prevent requesting containers from that peer
 	// again.
 	fetchFrom ids.NodeIDSet
-
-	// bootstrappedOnce ensures that the [Bootstrapped] callback is only invoked
-	// once, even if bootstrapping is retried.
-	bootstrappedOnce sync.Once
 }
 
-func New(ctx context.Context, config Config, onFinished func(ctx context.Context, lastReqID uint32) error) (common.BootstrapableEngine, error) {
+func New(config Config, onFinished func(lastReqID uint32) error) (common.BootstrapableEngine, error) {
 	metrics, err := newMetrics("bs", config.Ctx.Registerer)
 	if err != nil {
 		return nil, err
@@ -107,7 +102,7 @@ func New(ctx context.Context, config Config, onFinished func(ctx context.Context
 		numDropped:  b.numDropped,
 		vm:          b.VM,
 	}
-	if err := b.Blocked.SetParser(ctx, b.parser); err != nil {
+	if err := b.Blocked.SetParser(b.parser); err != nil {
 		return nil, err
 	}
 
@@ -117,21 +112,21 @@ func New(ctx context.Context, config Config, onFinished func(ctx context.Context
 	return b, nil
 }
 
-func (b *bootstrapper) Start(ctx context.Context, startReqID uint32) error {
+func (b *bootstrapper) Start(startReqID uint32) error {
 	b.Ctx.Log.Info("starting bootstrapper")
 
 	b.Ctx.SetState(snow.Bootstrapping)
-	if err := b.VM.SetState(ctx, snow.Bootstrapping); err != nil {
+	if err := b.VM.SetState(snow.Bootstrapping); err != nil {
 		return fmt.Errorf("failed to notify VM that bootstrapping has started: %w",
 			err)
 	}
 
 	// Set the starting height
-	lastAcceptedID, err := b.VM.LastAccepted(ctx)
+	lastAcceptedID, err := b.VM.LastAccepted()
 	if err != nil {
 		return fmt.Errorf("couldn't get last accepted ID: %w", err)
 	}
-	lastAccepted, err := b.VM.GetBlock(ctx, lastAcceptedID)
+	lastAccepted, err := b.VM.GetBlock(lastAcceptedID)
 	if err != nil {
 		return fmt.Errorf("couldn't get last accepted block: %w", err)
 	}
@@ -143,7 +138,7 @@ func (b *bootstrapper) Start(ctx context.Context, startReqID uint32) error {
 	}
 
 	b.started = true
-	return b.Startup(ctx)
+	return b.Startup()
 }
 
 // Ancestors handles the receipt of multiple containers. Should be received in
@@ -184,7 +179,7 @@ func (b *bootstrapper) Ancestors(ctx context.Context, nodeID ids.NodeID, request
 		)
 	}
 
-	blocks, err := block.BatchedParseBlock(ctx, b.VM, blks)
+	blocks, err := block.BatchedParseBlock(b.VM, blks)
 	if err != nil { // the provided blocks couldn't be parsed
 		b.Ctx.Log.Debug("failed to parse blocks in Ancestors",
 			zap.Stringer("nodeID", nodeID),
@@ -235,12 +230,12 @@ func (b *bootstrapper) GetAncestorsFailed(ctx context.Context, nodeID ids.NodeID
 	return b.fetch(ctx, blkID)
 }
 
-func (b *bootstrapper) Connected(ctx context.Context, nodeID ids.NodeID, nodeVersion *version.Application) error {
-	if err := b.VM.Connected(ctx, nodeID, nodeVersion); err != nil {
+func (b *bootstrapper) Connected(nodeID ids.NodeID, nodeVersion *version.Application) error {
+	if err := b.VM.Connected(nodeID, nodeVersion); err != nil {
 		return err
 	}
 
-	if err := b.StartupTracker.Connected(ctx, nodeID, nodeVersion); err != nil {
+	if err := b.StartupTracker.Connected(nodeID, nodeVersion); err != nil {
 		return err
 	}
 	// Ensure fetchFrom reflects proper validator list
@@ -253,15 +248,15 @@ func (b *bootstrapper) Connected(ctx context.Context, nodeID ids.NodeID, nodeVer
 	}
 
 	b.started = true
-	return b.Startup(ctx)
+	return b.Startup()
 }
 
-func (b *bootstrapper) Disconnected(ctx context.Context, nodeID ids.NodeID) error {
-	if err := b.VM.Disconnected(ctx, nodeID); err != nil {
+func (b *bootstrapper) Disconnected(nodeID ids.NodeID) error {
+	if err := b.VM.Disconnected(nodeID); err != nil {
 		return err
 	}
 
-	if err := b.StartupTracker.Disconnected(ctx, nodeID); err != nil {
+	if err := b.StartupTracker.Disconnected(nodeID); err != nil {
 		return err
 	}
 
@@ -269,34 +264,30 @@ func (b *bootstrapper) Disconnected(ctx context.Context, nodeID ids.NodeID) erro
 	return nil
 }
 
-func (b *bootstrapper) Timeout(ctx context.Context) error {
+func (b *bootstrapper) Timeout() error {
 	if !b.awaitingTimeout {
 		return errUnexpectedTimeout
 	}
 	b.awaitingTimeout = false
 
 	if !b.Config.Subnet.IsBootstrapped() {
-		return b.Restart(ctx, true)
+		return b.Restart(true)
 	}
 	b.fetchETA.Set(0)
-	return b.OnFinished(ctx, b.Config.SharedCfg.RequestID)
+	return b.OnFinished(b.Config.SharedCfg.RequestID)
 }
 
-func (*bootstrapper) Gossip(context.Context) error {
-	return nil
-}
+func (b *bootstrapper) Gossip() error { return nil }
 
-func (b *bootstrapper) Shutdown(ctx context.Context) error {
+func (b *bootstrapper) Shutdown() error {
 	b.Ctx.Log.Info("shutting down bootstrapper")
-	return b.VM.Shutdown(ctx)
+	return b.VM.Shutdown()
 }
 
-func (*bootstrapper) Notify(context.Context, common.Message) error {
-	return nil
-}
+func (b *bootstrapper) Notify(common.Message) error { return nil }
 
-func (b *bootstrapper) HealthCheck(ctx context.Context) (interface{}, error) {
-	vmIntf, vmErr := b.VM.HealthCheck(ctx)
+func (b *bootstrapper) HealthCheck() (interface{}, error) {
+	vmIntf, vmErr := b.VM.HealthCheck()
 	intf := map[string]interface{}{
 		"consensus": struct{}{},
 		"vm":        vmIntf,
@@ -304,9 +295,7 @@ func (b *bootstrapper) HealthCheck(ctx context.Context) (interface{}, error) {
 	return intf, vmErr
 }
 
-func (b *bootstrapper) GetVM() common.VM {
-	return b.VM
-}
+func (b *bootstrapper) GetVM() common.VM { return b.VM }
 
 func (b *bootstrapper) ForceAccepted(ctx context.Context, acceptedContainerIDs []ids.ID) error {
 	pendingContainerIDs := b.Blocked.MissingIDs()
@@ -327,9 +316,9 @@ func (b *bootstrapper) ForceAccepted(ctx context.Context, acceptedContainerIDs [
 
 		// TODO: if `GetBlock` returns an error other than
 		// `database.ErrNotFound`, then the error should be propagated.
-		blk, err := b.VM.GetBlock(ctx, blkID)
+		blk, err := b.VM.GetBlock(blkID)
 		if err != nil {
-			if err := b.fetch(ctx, blkID); err != nil {
+			if err := b.fetch(context.Background(), blkID); err != nil {
 				return err
 			}
 			continue
@@ -347,7 +336,7 @@ func (b *bootstrapper) ForceAccepted(ctx context.Context, acceptedContainerIDs [
 		}
 	}
 
-	return b.checkFinish(ctx)
+	return b.checkFinish()
 }
 
 // Get block [blkID] and its ancestors from a validator
@@ -358,8 +347,8 @@ func (b *bootstrapper) fetch(ctx context.Context, blkID ids.ID) error {
 	}
 
 	// Make sure we don't already have this block
-	if _, err := b.VM.GetBlock(ctx, blkID); err == nil {
-		return b.checkFinish(ctx)
+	if _, err := b.VM.GetBlock(blkID); err == nil {
+		return b.checkFinish()
 	}
 
 	validatorID, ok := b.fetchFrom.Peek()
@@ -433,7 +422,7 @@ func (b *bootstrapper) process(ctx context.Context, blk snowman.Block, processin
 			if err := b.Blocked.Commit(); err != nil {
 				return err
 			}
-			return b.checkFinish(ctx)
+			return b.checkFinish()
 		}
 
 		// If this block is going to be accepted, make sure to update the
@@ -442,7 +431,7 @@ func (b *bootstrapper) process(ctx context.Context, blk snowman.Block, processin
 			b.tipHeight = blkHeight
 		}
 
-		pushed, err := b.Blocked.Push(ctx, &blockJob{
+		pushed, err := b.Blocked.Push(&blockJob{
 			parser:      b.parser,
 			log:         b.Ctx.Log,
 			numAccepted: b.numAccepted,
@@ -460,7 +449,7 @@ func (b *bootstrapper) process(ctx context.Context, blk snowman.Block, processin
 			if err := b.Blocked.Commit(); err != nil {
 				return err
 			}
-			return b.checkFinish(ctx)
+			return b.checkFinish()
 		}
 
 		// We added a new block to the queue, so track that it was fetched
@@ -504,7 +493,7 @@ func (b *bootstrapper) process(ctx context.Context, blk snowman.Block, processin
 
 		// If the parent is not available in processing blocks, attempt to get
 		// the block from the vm
-		parent, err = b.VM.GetBlock(ctx, parentID)
+		parent, err = b.VM.GetBlock(parentID)
 		if err == nil {
 			blk = parent
 			continue
@@ -521,13 +510,13 @@ func (b *bootstrapper) process(ctx context.Context, blk snowman.Block, processin
 		if err := b.Blocked.Commit(); err != nil {
 			return err
 		}
-		return b.checkFinish(ctx)
+		return b.checkFinish()
 	}
 }
 
 // checkFinish repeatedly executes pending transactions and requests new frontier vertices until there aren't any new ones
 // after which it finishes the bootstrap process
-func (b *bootstrapper) checkFinish(ctx context.Context) error {
+func (b *bootstrapper) checkFinish() error {
 	if numPending := b.Blocked.NumMissingIDs(); numPending != 0 {
 		return nil
 	}
@@ -547,7 +536,6 @@ func (b *bootstrapper) checkFinish(ctx context.Context) error {
 	}
 
 	executedBlocks, err := b.Blocked.ExecuteAll(
-		ctx,
 		b.Config.Ctx,
 		b,
 		b.Config.SharedCfg.Restarted,
@@ -565,15 +553,13 @@ func (b *bootstrapper) checkFinish(ctx context.Context) error {
 	// so that the bootstrapping process will terminate even as new blocks are
 	// being issued.
 	if b.Config.RetryBootstrap && executedBlocks > 0 && executedBlocks < previouslyExecuted/2 {
-		return b.Restart(ctx, true)
+		return b.Restart(true)
 	}
 
 	// If there is an additional callback, notify them that this chain has been
 	// synced.
 	if b.Bootstrapped != nil {
-		b.bootstrappedOnce.Do(func() {
-			b.Bootstrapped()
-		})
+		b.Bootstrapped()
 	}
 
 	// Notify the subnet that this chain is synced
@@ -594,5 +580,5 @@ func (b *bootstrapper) checkFinish(ctx context.Context) error {
 		return nil
 	}
 	b.fetchETA.Set(0)
-	return b.OnFinished(ctx, b.Config.SharedCfg.RequestID)
+	return b.OnFinished(b.Config.SharedCfg.RequestID)
 }

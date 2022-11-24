@@ -4,7 +4,6 @@
 package tracker
 
 import (
-	"context"
 	"sync"
 
 	"github.com/ava-labs/avalanchego/ids"
@@ -51,11 +50,11 @@ func (s *startup) OnValidatorWeightChanged(nodeID ids.NodeID, oldWeight, newWeig
 	s.shouldStart = s.shouldStart || s.Peers.ConnectedWeight() >= s.startupWeight
 }
 
-func (s *startup) Connected(ctx context.Context, nodeID ids.NodeID, nodeVersion *version.Application) error {
+func (s *startup) Connected(nodeID ids.NodeID, nodeVersion *version.Application) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if err := s.Peers.Connected(ctx, nodeID, nodeVersion); err != nil {
+	if err := s.Peers.Connected(nodeID, nodeVersion); err != nil {
 		return err
 	}
 

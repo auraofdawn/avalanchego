@@ -42,9 +42,7 @@ func NewClient(header http.Header, client responsewriterpb.WriterClient) *Client
 	}
 }
 
-func (c *Client) Header() http.Header {
-	return c.header
-}
+func (c *Client) Header() http.Header { return c.header }
 
 func (c *Client) Write(payload []byte) (int, error) {
 	req := &responsewriterpb.WriteRequest{
@@ -89,13 +87,8 @@ type addr struct {
 	str     string
 }
 
-func (a *addr) Network() string {
-	return a.network
-}
-
-func (a *addr) String() string {
-	return a.str
-}
+func (a *addr) Network() string { return a.network }
+func (a *addr) String() string  { return a.str }
 
 func (c *Client) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	resp, err := c.client.Hijack(context.Background(), &emptypb.Empty{})

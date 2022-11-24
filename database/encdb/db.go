@@ -4,7 +4,6 @@
 package encdb
 
 import (
-	"context"
 	"crypto/cipher"
 	"crypto/rand"
 	"sync"
@@ -35,7 +34,6 @@ type Database struct {
 	codec  codec.Manager
 	cipher cipher.AEAD
 	db     database.Database
-	closed bool
 }
 
 // New returns a new encrypted database
@@ -58,7 +56,7 @@ func (db *Database) Has(key []byte) (bool, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	if db.closed {
+	if db.db == nil {
 		return false, database.ErrClosed
 	}
 	return db.db.Has(key)
@@ -68,7 +66,7 @@ func (db *Database) Get(key []byte) ([]byte, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	if db.closed {
+	if db.db == nil {
 		return nil, database.ErrClosed
 	}
 	encVal, err := db.db.Get(key)
@@ -82,7 +80,7 @@ func (db *Database) Put(key, value []byte) error {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
-	if db.closed {
+	if db.db == nil {
 		return database.ErrClosed
 	}
 
@@ -97,7 +95,7 @@ func (db *Database) Delete(key []byte) error {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
-	if db.closed {
+	if db.db == nil {
 		return database.ErrClosed
 	}
 	return db.db.Delete(key)
@@ -126,7 +124,7 @@ func (db *Database) NewIteratorWithStartAndPrefix(start, prefix []byte) database
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	if db.closed {
+	if db.db == nil {
 		return &nodb.Iterator{Err: database.ErrClosed}
 	}
 	return &iterator{
@@ -139,7 +137,7 @@ func (db *Database) Compact(start, limit []byte) error {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
-	if db.closed {
+	if db.db == nil {
 		return database.ErrClosed
 	}
 	return db.db.Compact(start, limit)
@@ -149,10 +147,10 @@ func (db *Database) Close() error {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
-	if db.closed {
+	if db.db == nil {
 		return database.ErrClosed
 	}
-	db.closed = true
+	db.db = nil
 	return nil
 }
 
@@ -160,17 +158,17 @@ func (db *Database) isClosed() bool {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	return db.closed
+	return db.db == nil
 }
 
-func (db *Database) HealthCheck(ctx context.Context) (interface{}, error) {
+func (db *Database) HealthCheck() (interface{}, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	if db.closed {
+	if db.db == nil {
 		return nil, database.ErrClosed
 	}
-	return db.db.HealthCheck(ctx)
+	return db.db.HealthCheck()
 }
 
 type keyValue struct {
@@ -204,7 +202,7 @@ func (b *batch) Write() error {
 	b.db.lock.Lock()
 	defer b.db.lock.Unlock()
 
-	if b.db.closed {
+	if b.db.db == nil {
 		return database.ErrClosed
 	}
 
@@ -276,13 +274,9 @@ func (it *iterator) Error() error {
 	return it.Iterator.Error()
 }
 
-func (it *iterator) Key() []byte {
-	return it.key
-}
+func (it *iterator) Key() []byte { return it.key }
 
-func (it *iterator) Value() []byte {
-	return it.val
-}
+func (it *iterator) Value() []byte { return it.val }
 
 type encryptedValue struct {
 	Ciphertext []byte `serialize:"true"`

@@ -853,21 +853,10 @@ func (s *state) GetStartTime(nodeID ids.NodeID) (time.Time, error) {
 	return staker.StartTime, nil
 }
 
-func (s *state) GetTimestamp() time.Time {
-	return s.timestamp
-}
-
-func (s *state) SetTimestamp(tm time.Time) {
-	s.timestamp = tm
-}
-
-func (s *state) GetLastAccepted() ids.ID {
-	return s.lastAccepted
-}
-
-func (s *state) SetLastAccepted(lastAccepted ids.ID) {
-	s.lastAccepted = lastAccepted
-}
+func (s *state) GetTimestamp() time.Time             { return s.timestamp }
+func (s *state) SetTimestamp(tm time.Time)           { s.timestamp = tm }
+func (s *state) GetLastAccepted() ids.ID             { return s.lastAccepted }
+func (s *state) SetLastAccepted(lastAccepted ids.ID) { s.lastAccepted = lastAccepted }
 
 func (s *state) GetCurrentSupply(subnetID ids.ID) (uint64, error) {
 	if subnetID == constants.PrimaryNetworkID {
@@ -1007,11 +996,7 @@ func (s *state) syncGenesis(genesisBlk blocks.Block, genesis *genesis.State) err
 			return err
 		}
 
-		staker, err := NewCurrentStaker(vdrTx.ID(), tx, potentialReward)
-		if err != nil {
-			return err
-		}
-
+		staker := NewCurrentStaker(vdrTx.ID(), tx, potentialReward)
 		s.PutCurrentValidator(staker)
 		s.AddTx(vdrTx, status.Committed)
 		s.SetCurrentSupply(constants.PrimaryNetworkID, newCurrentSupply)
@@ -1100,11 +1085,7 @@ func (s *state) loadCurrentValidators() error {
 			return fmt.Errorf("expected tx type txs.Staker but got %T", tx.Unsigned)
 		}
 
-		staker, err := NewCurrentStaker(txID, stakerTx, uptime.PotentialReward)
-		if err != nil {
-			return err
-		}
-
+		staker := NewCurrentStaker(txID, stakerTx, uptime.PotentialReward)
 		validator := s.currentStakers.getOrCreateValidator(staker.SubnetID, staker.NodeID)
 		validator.validator = staker
 
@@ -1126,28 +1107,15 @@ func (s *state) loadCurrentValidators() error {
 			return err
 		}
 
-		// Permissioned validators originally wrote their values as nil,
-		// then with Banff we started writing the potential reward.
-		// We will write the uptime and reward together. We handle this format
-		// now for forward-compatibility.
+		// Because permissioned validators originally wrote their values as nil,
+		// we handle empty [potentialRewardBytes] as 0.
 		var potentialReward uint64
-		storedBytes := subnetValidatorIt.Value()
-		switch len(storedBytes) {
-		// no uptime or potential reward stored
-		case 0:
-		// potential reward was stored and uptime was not
-		case database.Uint64Size:
-			potentialReward, err = database.ParseUInt64(storedBytes)
+		potentialRewardBytes := subnetValidatorIt.Value()
+		if len(potentialRewardBytes) > 0 {
+			potentialReward, err = database.ParseUInt64(potentialRewardBytes)
 			if err != nil {
 				return err
 			}
-		// both uptime and potential reward were stored
-		default:
-			uptimeReward := &uptimeAndReward{}
-			if _, err := txs.Codec.Unmarshal(storedBytes, uptimeReward); err != nil {
-				return err
-			}
-			potentialReward = uptimeReward.PotentialReward
 		}
 
 		stakerTx, ok := tx.Unsigned.(txs.Staker)
@@ -1155,11 +1123,7 @@ func (s *state) loadCurrentValidators() error {
 			return fmt.Errorf("expected tx type txs.Staker but got %T", tx.Unsigned)
 		}
 
-		staker, err := NewCurrentStaker(txID, stakerTx, potentialReward)
-		if err != nil {
-			return err
-		}
-
+		staker := NewCurrentStaker(txID, stakerTx, potentialReward)
 		validator := s.currentStakers.getOrCreateValidator(staker.SubnetID, staker.NodeID)
 		validator.validator = staker
 
@@ -1195,11 +1159,7 @@ func (s *state) loadCurrentValidators() error {
 				return fmt.Errorf("expected tx type txs.Staker but got %T", tx.Unsigned)
 			}
 
-			staker, err := NewCurrentStaker(txID, stakerTx, potentialReward)
-			if err != nil {
-				return err
-			}
-
+			staker := NewCurrentStaker(txID, stakerTx, potentialReward)
 			validator := s.currentStakers.getOrCreateValidator(staker.SubnetID, staker.NodeID)
 			if validator.delegators == nil {
 				validator.delegators = btree.New(defaultTreeDegree)
@@ -1246,11 +1206,7 @@ func (s *state) loadPendingValidators() error {
 				return fmt.Errorf("expected tx type txs.Staker but got %T", tx.Unsigned)
 			}
 
-			staker, err := NewPendingStaker(txID, stakerTx)
-			if err != nil {
-				return err
-			}
-
+			staker := NewPendingStaker(txID, stakerTx)
 			validator := s.pendingStakers.getOrCreateValidator(staker.SubnetID, staker.NodeID)
 			validator.validator = staker
 
@@ -1281,11 +1237,7 @@ func (s *state) loadPendingValidators() error {
 				return fmt.Errorf("expected tx type txs.Staker but got %T", tx.Unsigned)
 			}
 
-			staker, err := NewPendingStaker(txID, stakerTx)
-			if err != nil {
-				return err
-			}
-
+			staker := NewPendingStaker(txID, stakerTx)
 			validator := s.pendingStakers.getOrCreateValidator(staker.SubnetID, staker.NodeID)
 			if validator.delegators == nil {
 				validator.delegators = btree.New(defaultTreeDegree)

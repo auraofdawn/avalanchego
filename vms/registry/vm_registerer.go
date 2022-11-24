@@ -4,7 +4,6 @@
 package registry
 
 import (
-	"context"
 	"fmt"
 	"path"
 	"sync"
@@ -26,12 +25,12 @@ type VMRegisterer interface {
 	registerer
 	// RegisterWithReadLock installs the VM assuming that the http read-lock is
 	// held.
-	RegisterWithReadLock(context.Context, ids.ID, vms.Factory) error
+	RegisterWithReadLock(ids.ID, vms.Factory) error
 }
 
 type registerer interface {
 	// Register installs the VM.
-	Register(context.Context, ids.ID, vms.Factory) error
+	Register(ids.ID, vms.Factory) error
 }
 
 // VMRegistererConfig configures settings for VMRegisterer.
@@ -52,19 +51,19 @@ func NewVMRegisterer(config VMRegistererConfig) VMRegisterer {
 	}
 }
 
-func (r *vmRegisterer) Register(ctx context.Context, vmID ids.ID, factory vms.Factory) error {
-	return r.register(ctx, r.config.APIServer, vmID, factory)
+func (r *vmRegisterer) Register(vmID ids.ID, factory vms.Factory) error {
+	return r.register(r.config.APIServer, vmID, factory)
 }
 
-func (r *vmRegisterer) RegisterWithReadLock(ctx context.Context, vmID ids.ID, factory vms.Factory) error {
-	return r.register(ctx, server.PathWriterFromWithReadLock(r.config.APIServer), vmID, factory)
+func (r *vmRegisterer) RegisterWithReadLock(vmID ids.ID, factory vms.Factory) error {
+	return r.register(server.PathWriterFromWithReadLock(r.config.APIServer), vmID, factory)
 }
 
-func (r *vmRegisterer) register(ctx context.Context, pathAdder server.PathAdder, vmID ids.ID, factory vms.Factory) error {
-	if err := r.config.VMManager.RegisterFactory(ctx, vmID, factory); err != nil {
+func (r *vmRegisterer) register(pathAdder server.PathAdder, vmID ids.ID, factory vms.Factory) error {
+	if err := r.config.VMManager.RegisterFactory(vmID, factory); err != nil {
 		return err
 	}
-	handlers, err := r.createStaticHandlers(ctx, vmID, factory)
+	handlers, err := r.createStaticHandlers(vmID, factory)
 	if err != nil {
 		return err
 	}
@@ -82,14 +81,7 @@ func (r *vmRegisterer) register(ctx context.Context, pathAdder server.PathAdder,
 	return pathAdder.AddAliases(defaultEndpoint, urlAliases...)
 }
 
-// Creates a dedicated VM instance for the sole purpose of serving the static
-// handlers.
-func (r *vmRegisterer) createStaticHandlers(
-	ctx context.Context,
-	vmID ids.ID,
-	factory vms.Factory,
-) (map[string]*common.HTTPHandler, error) {
-	// passing a nil ctx to the factory disables logging.
+func (r *vmRegisterer) createStaticHandlers(vmID ids.ID, factory vms.Factory) (map[string]*common.HTTPHandler, error) {
 	vm, err := factory.New(nil)
 	if err != nil {
 		return nil, err
@@ -100,14 +92,14 @@ func (r *vmRegisterer) createStaticHandlers(
 		return nil, fmt.Errorf("%s doesn't implement VM", vmID)
 	}
 
-	handlers, err := commonVM.CreateStaticHandlers(ctx)
+	handlers, err := commonVM.CreateStaticHandlers()
 	if err != nil {
 		r.config.Log.Error("failed to create static API endpoints",
 			zap.Stringer("vmID", vmID),
 			zap.Error(err),
 		)
 
-		if err := commonVM.Shutdown(ctx); err != nil {
+		if err := commonVM.Shutdown(); err != nil {
 			return nil, fmt.Errorf("shutting down VM errored with: %w", err)
 		}
 		return nil, err
@@ -126,7 +118,7 @@ func (r *vmRegisterer) createStaticEndpoints(pathAdder server.PathAdder, handler
 		)
 		if err := pathAdder.AddRoute(service, lock, defaultEndpoint, extension); err != nil {
 			return fmt.Errorf(
-				"failed to add static API endpoint %s%s: %w",
+				"failed to add static API endpoint %s%s: %s",
 				defaultEndpoint,
 				extension,
 				err,
@@ -156,6 +148,6 @@ type readRegisterer struct {
 	registerer VMRegisterer
 }
 
-func (r readRegisterer) Register(ctx context.Context, vmID ids.ID, factory vms.Factory) error {
-	return r.registerer.RegisterWithReadLock(ctx, vmID, factory)
+func (r readRegisterer) Register(vmID ids.ID, factory vms.Factory) error {
+	return r.registerer.RegisterWithReadLock(vmID, factory)
 }

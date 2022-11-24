@@ -19,19 +19,10 @@ func (d sortHashOfData) Less(i, j int) bool {
 		hashing.ComputeHash256(d[j]),
 	) == -1
 }
+func (d sortHashOfData) Len() int      { return len(d) }
+func (d sortHashOfData) Swap(i, j int) { d[j], d[i] = d[i], d[j] }
 
-func (d sortHashOfData) Len() int {
-	return len(d)
-}
-
-func (d sortHashOfData) Swap(i, j int) {
-	d[j], d[i] = d[i], d[j]
-}
-
-func SortHashOf(bytesSlice [][]byte) {
-	sort.Sort(sortHashOfData(bytesSlice))
-}
-
+func SortHashOf(bytesSlice [][]byte) { sort.Sort(sortHashOfData(bytesSlice)) }
 func IsSortedAndUniqueHashOf(bytesSlice [][]byte) bool {
 	return utils.IsSortedAndUnique(sortHashOfData(bytesSlice))
 }

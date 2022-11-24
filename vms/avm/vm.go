@@ -113,11 +113,11 @@ type VM struct {
 	uniqueTxs cache.Deduplicator
 }
 
-func (*VM) Connected(context.Context, ids.NodeID, *version.Application) error {
+func (vm *VM) Connected(nodeID ids.NodeID, nodeVersion *version.Application) error {
 	return nil
 }
 
-func (*VM) Disconnected(context.Context, ids.NodeID) error {
+func (vm *VM) Disconnected(nodeID ids.NodeID) error {
 	return nil
 }
 
@@ -133,11 +133,10 @@ type Config struct {
 }
 
 func (vm *VM) Initialize(
-	_ context.Context,
 	ctx *snow.Context,
 	dbManager manager.Manager,
 	genesisBytes []byte,
-	_ []byte,
+	upgradeBytes []byte,
 	configBytes []byte,
 	toEngine chan<- common.Message,
 	fxs []*common.Fx,
@@ -172,7 +171,7 @@ func (vm *VM) Initialize(
 	vm.db = versiondb.New(db)
 	vm.assetToFxCache = &cache.LRU{Size: assetToFxCacheSize}
 
-	vm.pubsub = pubsub.New(ctx.Log)
+	vm.pubsub = pubsub.New(ctx.NetworkID, ctx.Log)
 
 	typedFxs := make([]extensions.Fx, len(fxs))
 	vm.fxs = make([]*extensions.ParsedFx, len(fxs))
@@ -268,7 +267,7 @@ func (vm *VM) onNormalOperationsStarted() error {
 	return nil
 }
 
-func (vm *VM) SetState(_ context.Context, state snow.State) error {
+func (vm *VM) SetState(state snow.State) error {
 	switch state {
 	case snow.Bootstrapping:
 		return vm.onBootstrapStarted()
@@ -279,7 +278,7 @@ func (vm *VM) SetState(_ context.Context, state snow.State) error {
 	}
 }
 
-func (vm *VM) Shutdown(context.Context) error {
+func (vm *VM) Shutdown() error {
 	if vm.timer == nil {
 		return nil
 	}
@@ -293,11 +292,11 @@ func (vm *VM) Shutdown(context.Context) error {
 	return vm.baseDB.Close()
 }
 
-func (*VM) Version(context.Context) (string, error) {
+func (vm *VM) Version() (string, error) {
 	return version.Current.String(), nil
 }
 
-func (vm *VM) CreateHandlers(context.Context) (map[string]*common.HTTPHandler, error) {
+func (vm *VM) CreateHandlers() (map[string]*common.HTTPHandler, error) {
 	codec := json.NewCodec()
 
 	rpcServer := rpc.NewServer()
@@ -325,7 +324,7 @@ func (vm *VM) CreateHandlers(context.Context) (map[string]*common.HTTPHandler, e
 	}, err
 }
 
-func (*VM) CreateStaticHandlers(context.Context) (map[string]*common.HTTPHandler, error) {
+func (vm *VM) CreateStaticHandlers() (map[string]*common.HTTPHandler, error) {
 	newServer := rpc.NewServer()
 	codec := json.NewCodec()
 	newServer.RegisterCodec(codec, "application/json")
@@ -338,7 +337,7 @@ func (*VM) CreateStaticHandlers(context.Context) (map[string]*common.HTTPHandler
 	}, newServer.RegisterService(staticService, "avm")
 }
 
-func (vm *VM) PendingTxs(context.Context) []snowstorm.Tx {
+func (vm *VM) PendingTxs() []snowstorm.Tx {
 	vm.timer.Cancel()
 
 	txs := vm.txs
@@ -346,11 +345,11 @@ func (vm *VM) PendingTxs(context.Context) []snowstorm.Tx {
 	return txs
 }
 
-func (vm *VM) ParseTx(_ context.Context, b []byte) (snowstorm.Tx, error) {
+func (vm *VM) ParseTx(b []byte) (snowstorm.Tx, error) {
 	return vm.parseTx(b)
 }
 
-func (vm *VM) GetTx(_ context.Context, txID ids.ID) (snowstorm.Tx, error) {
+func (vm *VM) GetTx(txID ids.ID) (snowstorm.Tx, error) {
 	tx := &UniqueTx{
 		vm:   vm,
 		txID: txID,
@@ -1048,35 +1047,35 @@ func (vm *VM) lookupAssetID(asset string) (ids.ID, error) {
 	return ids.ID{}, fmt.Errorf("asset '%s' not found", asset)
 }
 
-func (*VM) CrossChainAppRequest(context.Context, ids.ID, uint32, time.Time, []byte) error {
+func (vm *VM) CrossChainAppRequest(_ context.Context, chainID ids.ID, requestID uint32, deadline time.Time, request []byte) error {
 	return nil
 }
 
-func (*VM) CrossChainAppRequestFailed(context.Context, ids.ID, uint32) error {
+func (vm *VM) CrossChainAppRequestFailed(_ context.Context, chainID ids.ID, requestID uint32) error {
 	return nil
 }
 
-func (*VM) CrossChainAppResponse(context.Context, ids.ID, uint32, []byte) error {
-	return nil
-}
-
-// This VM doesn't (currently) have any app-specific messages
-func (*VM) AppRequest(context.Context, ids.NodeID, uint32, time.Time, []byte) error {
+func (vm *VM) CrossChainAppResponse(_ context.Context, chainID ids.ID, requestID uint32, response []byte) error {
 	return nil
 }
 
 // This VM doesn't (currently) have any app-specific messages
-func (*VM) AppResponse(context.Context, ids.NodeID, uint32, []byte) error {
+func (vm *VM) AppRequest(_ context.Context, nodeID ids.NodeID, requestID uint32, deadline time.Time, request []byte) error {
 	return nil
 }
 
 // This VM doesn't (currently) have any app-specific messages
-func (*VM) AppRequestFailed(context.Context, ids.NodeID, uint32) error {
+func (vm *VM) AppResponse(_ context.Context, nodeID ids.NodeID, requestID uint32, response []byte) error {
 	return nil
 }
 
 // This VM doesn't (currently) have any app-specific messages
-func (*VM) AppGossip(context.Context, ids.NodeID, []byte) error {
+func (vm *VM) AppRequestFailed(_ context.Context, nodeID ids.NodeID, requestID uint32) error {
+	return nil
+}
+
+// This VM doesn't (currently) have any app-specific messages
+func (vm *VM) AppGossip(_ context.Context, nodeID ids.NodeID, msg []byte) error {
 	return nil
 }
 

@@ -86,9 +86,7 @@ func (r *Requests) RemoveAny(containerID ids.ID) bool {
 }
 
 // Len returns the total number of outstanding requests.
-func (r *Requests) Len() int {
-	return len(r.idToReq)
-}
+func (r *Requests) Len() int { return len(r.idToReq) }
 
 // Contains returns true if there is an outstanding request for the container
 // ID.

@@ -15,9 +15,7 @@ var (
 // FlatFactory implements Factory by returning a flat struct
 type FlatFactory struct{}
 
-func (FlatFactory) New() Consensus {
-	return &Flat{}
-}
+func (FlatFactory) New() Consensus { return &Flat{} }
 
 // Flat is a naive implementation of a multi-choice snowball instance
 type Flat struct {
@@ -32,6 +30,8 @@ func (f *Flat) Initialize(params Parameters, choice ids.ID) {
 	f.nnarySnowball.Initialize(params.BetaVirtuous, params.BetaRogue, choice)
 	f.params = params
 }
+
+func (f *Flat) Parameters() Parameters { return f.params }
 
 func (f *Flat) RecordPoll(votes ids.Bag) bool {
 	if pollMode, numVotes := votes.Mode(); numVotes >= f.params.Alpha {

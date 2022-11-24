@@ -139,12 +139,7 @@ func newDefaultTargeter(t tracker.Tracker) tracker.Targeter {
 }
 
 func newDefaultResourceTracker() tracker.ResourceTracker {
-	tracker, err := tracker.NewResourceTracker(
-		prometheus.NewRegistry(),
-		resource.NoUsage,
-		meter.ContinuousFactory{},
-		10*time.Second,
-	)
+	tracker, err := tracker.NewResourceTracker(prometheus.NewRegistry(), resource.NoUsage, meter.ContinuousFactory{}, 10*time.Second)
 	if err != nil {
 		panic(err)
 	}
@@ -323,7 +318,7 @@ func TestSend(t *testing.T) {
 	require.EqualValues(toSend, sentTo)
 
 	inboundGetMsg := <-received
-	require.Equal(message.GetOp, inboundGetMsg.Op())
+	require.Equal(message.Get, inboundGetMsg.Op())
 
 	for _, net := range networks {
 		net.StartClose()

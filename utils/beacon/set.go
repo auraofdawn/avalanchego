@@ -99,9 +99,7 @@ func (s *set) RemoveByIP(ip ips.IPPort) error {
 	return s.RemoveByID(idToRemove)
 }
 
-func (s *set) Len() int {
-	return len(s.beacons)
-}
+func (s *set) Len() int { return len(s.beacons) }
 
 func (s *set) IDsArg() string {
 	sb := strings.Builder{}

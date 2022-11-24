@@ -4,7 +4,6 @@
 package vertex
 
 import (
-	"context"
 	"errors"
 
 	"github.com/ava-labs/avalanchego/ids"
@@ -23,9 +22,9 @@ type TestVM struct {
 
 	CantPendingTxs, CantParse, CantGet bool
 
-	PendingTxsF func(context.Context) []snowstorm.Tx
-	ParseTxF    func(context.Context, []byte) (snowstorm.Tx, error)
-	GetTxF      func(context.Context, ids.ID) (snowstorm.Tx, error)
+	PendingTxsF func() []snowstorm.Tx
+	ParseTxF    func([]byte) (snowstorm.Tx, error)
+	GetTxF      func(ids.ID) (snowstorm.Tx, error)
 }
 
 func (vm *TestVM) Default(cant bool) {
@@ -36,9 +35,9 @@ func (vm *TestVM) Default(cant bool) {
 	vm.CantGet = cant
 }
 
-func (vm *TestVM) PendingTxs(ctx context.Context) []snowstorm.Tx {
+func (vm *TestVM) PendingTxs() []snowstorm.Tx {
 	if vm.PendingTxsF != nil {
-		return vm.PendingTxsF(ctx)
+		return vm.PendingTxsF()
 	}
 	if vm.CantPendingTxs && vm.T != nil {
 		vm.T.Fatal(errPending)
@@ -46,9 +45,9 @@ func (vm *TestVM) PendingTxs(ctx context.Context) []snowstorm.Tx {
 	return nil
 }
 
-func (vm *TestVM) ParseTx(ctx context.Context, b []byte) (snowstorm.Tx, error) {
+func (vm *TestVM) ParseTx(b []byte) (snowstorm.Tx, error) {
 	if vm.ParseTxF != nil {
-		return vm.ParseTxF(ctx, b)
+		return vm.ParseTxF(b)
 	}
 	if vm.CantParse && vm.T != nil {
 		vm.T.Fatal(errParse)
@@ -56,9 +55,9 @@ func (vm *TestVM) ParseTx(ctx context.Context, b []byte) (snowstorm.Tx, error) {
 	return nil, errParse
 }
 
-func (vm *TestVM) GetTx(ctx context.Context, txID ids.ID) (snowstorm.Tx, error) {
+func (vm *TestVM) GetTx(txID ids.ID) (snowstorm.Tx, error) {
 	if vm.GetTxF != nil {
-		return vm.GetTxF(ctx, txID)
+		return vm.GetTxF(txID)
 	}
 	if vm.CantGet && vm.T != nil {
 		vm.T.Fatal(errGet)

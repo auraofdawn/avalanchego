@@ -17,18 +17,10 @@ type binarySlush struct {
 	preference int
 }
 
-func (sl *binarySlush) Initialize(choice int) {
-	sl.preference = choice
-}
+func (sl *binarySlush) Initialize(choice int) { sl.preference = choice }
 
-func (sl *binarySlush) Preference() int {
-	return sl.preference
-}
+func (sl *binarySlush) Preference() int { return sl.preference }
 
-func (sl *binarySlush) RecordSuccessfulPoll(choice int) {
-	sl.preference = choice
-}
+func (sl *binarySlush) RecordSuccessfulPoll(choice int) { sl.preference = choice }
 
-func (sl *binarySlush) String() string {
-	return fmt.Sprintf("SL(Preference = %d)", sl.preference)
-}
+func (sl *binarySlush) String() string { return fmt.Sprintf("SL(Preference = %d)", sl.preference) }

@@ -75,18 +75,18 @@ func (b *Blocker) Register(ctx context.Context, pending Blockable) {
 func (b *Blocker) PrefixedString(prefix string) string {
 	b.init()
 
-	sb := strings.Builder{}
-	sb.WriteString(fmt.Sprintf("Blocking on %d IDs:", len(*b)))
+	s := strings.Builder{}
+
+	s.WriteString(fmt.Sprintf("Blocking on %d IDs:", len(*b)))
+
 	for key, value := range *b {
-		sb.WriteString(fmt.Sprintf("\n%sID[%s]: %d",
+		s.WriteString(fmt.Sprintf("\n%sID[%s]: %d",
 			prefix,
 			key,
-			len(value),
-		))
+			len(value)))
 	}
-	return strings.TrimSuffix(sb.String(), "\n")
+
+	return strings.TrimSuffix(s.String(), "\n")
 }
 
-func (b *Blocker) String() string {
-	return b.PrefixedString("")
-}
+func (b *Blocker) String() string { return b.PrefixedString("") }

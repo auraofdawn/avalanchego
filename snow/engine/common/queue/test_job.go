@@ -4,7 +4,6 @@
 package queue
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -27,10 +26,10 @@ type TestJob struct {
 	CantHasMissingDependencies bool
 
 	IDF                     func() ids.ID
-	MissingDependenciesF    func(context.Context) (ids.Set, error)
-	ExecuteF                func(context.Context) error
+	MissingDependenciesF    func() (ids.Set, error)
+	ExecuteF                func() error
 	BytesF                  func() []byte
-	HasMissingDependenciesF func(context.Context) (bool, error)
+	HasMissingDependenciesF func() (bool, error)
 }
 
 func (j *TestJob) Default(cant bool) {
@@ -51,9 +50,9 @@ func (j *TestJob) ID() ids.ID {
 	return ids.ID{}
 }
 
-func (j *TestJob) MissingDependencies(ctx context.Context) (ids.Set, error) {
+func (j *TestJob) MissingDependencies() (ids.Set, error) {
 	if j.MissingDependenciesF != nil {
-		return j.MissingDependenciesF(ctx)
+		return j.MissingDependenciesF()
 	}
 	if j.CantMissingDependencies && j.T != nil {
 		j.T.Fatalf("Unexpectedly called MissingDependencies")
@@ -61,9 +60,9 @@ func (j *TestJob) MissingDependencies(ctx context.Context) (ids.Set, error) {
 	return ids.Set{}, nil
 }
 
-func (j *TestJob) Execute(ctx context.Context) error {
+func (j *TestJob) Execute() error {
 	if j.ExecuteF != nil {
-		return j.ExecuteF(ctx)
+		return j.ExecuteF()
 	}
 	if j.CantExecute && j.T != nil {
 		j.T.Fatal(errExecute)
@@ -81,9 +80,9 @@ func (j *TestJob) Bytes() []byte {
 	return nil
 }
 
-func (j *TestJob) HasMissingDependencies(ctx context.Context) (bool, error) {
+func (j *TestJob) HasMissingDependencies() (bool, error) {
 	if j.HasMissingDependenciesF != nil {
-		return j.HasMissingDependenciesF(ctx)
+		return j.HasMissingDependenciesF()
 	}
 	if j.CantHasMissingDependencies && j.T != nil {
 		j.T.Fatal(errHasMissingDependencies)

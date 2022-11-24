@@ -11,9 +11,7 @@ import (
 	"github.com/ava-labs/avalanchego/network/peer"
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
+func init() { rand.Seed(time.Now().UnixNano()) }
 
 type trackedIP struct {
 	delayLock sync.RWMutex

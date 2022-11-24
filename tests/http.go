@@ -63,5 +63,6 @@ func getHTTPLines(url string) ([]string, error) {
 		}
 		lines = append(lines, strings.TrimSpace(line))
 	}
-	return lines, resp.Body.Close()
+	resp.Body.Close()
+	return lines, nil
 }

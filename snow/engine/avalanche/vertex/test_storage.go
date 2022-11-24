@@ -4,7 +4,6 @@
 package vertex
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -23,9 +22,9 @@ var (
 type TestStorage struct {
 	T                                            *testing.T
 	CantGetVtx, CantEdge, CantStopVertexAccepted bool
-	GetVtxF                                      func(context.Context, ids.ID) (avalanche.Vertex, error)
-	EdgeF                                        func(context.Context) []ids.ID
-	StopVertexAcceptedF                          func(context.Context) (bool, error)
+	GetVtxF                                      func(ids.ID) (avalanche.Vertex, error)
+	EdgeF                                        func() []ids.ID
+	StopVertexAcceptedF                          func() (bool, error)
 }
 
 func (s *TestStorage) Default(cant bool) {
@@ -33,9 +32,9 @@ func (s *TestStorage) Default(cant bool) {
 	s.CantEdge = cant
 }
 
-func (s *TestStorage) GetVtx(ctx context.Context, vtxID ids.ID) (avalanche.Vertex, error) {
+func (s *TestStorage) GetVtx(id ids.ID) (avalanche.Vertex, error) {
 	if s.GetVtxF != nil {
-		return s.GetVtxF(ctx, vtxID)
+		return s.GetVtxF(id)
 	}
 	if s.CantGetVtx && s.T != nil {
 		s.T.Fatal(errGet)
@@ -43,9 +42,9 @@ func (s *TestStorage) GetVtx(ctx context.Context, vtxID ids.ID) (avalanche.Verte
 	return nil, errGet
 }
 
-func (s *TestStorage) Edge(ctx context.Context) []ids.ID {
+func (s *TestStorage) Edge() []ids.ID {
 	if s.EdgeF != nil {
-		return s.EdgeF(ctx)
+		return s.EdgeF()
 	}
 	if s.CantEdge && s.T != nil {
 		s.T.Fatal(errEdge)
@@ -53,9 +52,9 @@ func (s *TestStorage) Edge(ctx context.Context) []ids.ID {
 	return nil
 }
 
-func (s *TestStorage) StopVertexAccepted(ctx context.Context) (bool, error) {
+func (s *TestStorage) StopVertexAccepted() (bool, error) {
 	if s.StopVertexAcceptedF != nil {
-		return s.StopVertexAcceptedF(ctx)
+		return s.StopVertexAcceptedF()
 	}
 	if s.CantStopVertexAccepted && s.T != nil {
 		s.T.Fatal(errStopVertexAccepted)

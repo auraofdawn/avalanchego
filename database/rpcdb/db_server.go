@@ -95,8 +95,8 @@ func (db *DatabaseServer) Close(context.Context, *rpcdbpb.CloseRequest) (*rpcdbp
 }
 
 // HealthCheck performs a heath check against the underlying database.
-func (db *DatabaseServer) HealthCheck(ctx context.Context, _ *emptypb.Empty) (*rpcdbpb.HealthCheckResponse, error) {
-	health, err := db.db.HealthCheck(ctx)
+func (db *DatabaseServer) HealthCheck(context.Context, *emptypb.Empty) (*rpcdbpb.HealthCheckResponse, error) {
+	health, err := db.db.HealthCheck()
 	if err != nil {
 		return &rpcdbpb.HealthCheckResponse{}, err
 	}

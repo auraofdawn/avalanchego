@@ -4,7 +4,6 @@
 package avalanche
 
 import (
-	"context"
 	"errors"
 
 	"github.com/ava-labs/avalanchego/ids"
@@ -23,7 +22,7 @@ type EngineTest struct {
 	common.EngineTest
 
 	CantGetVtx bool
-	GetVtxF    func(ctx context.Context, vtxID ids.ID) (avalanche.Vertex, error)
+	GetVtxF    func(vtxID ids.ID) (avalanche.Vertex, error)
 }
 
 func (e *EngineTest) Default(cant bool) {
@@ -31,9 +30,9 @@ func (e *EngineTest) Default(cant bool) {
 	e.CantGetVtx = false
 }
 
-func (e *EngineTest) GetVtx(ctx context.Context, vtxID ids.ID) (avalanche.Vertex, error) {
+func (e *EngineTest) GetVtx(vtxID ids.ID) (avalanche.Vertex, error) {
 	if e.GetVtxF != nil {
-		return e.GetVtxF(ctx, vtxID)
+		return e.GetVtxF(vtxID)
 	}
 	if e.CantGetVtx && e.T != nil {
 		e.T.Fatalf("Unexpectedly called GetVtx")

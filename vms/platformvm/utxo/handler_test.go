@@ -26,7 +26,7 @@ type dummyUnsignedTx struct {
 	txs.BaseTx
 }
 
-func (*dummyUnsignedTx) Visit(txs.Visitor) error {
+func (du *dummyUnsignedTx) Visit(txs.Visitor) error {
 	return nil
 }
 

@@ -9,7 +9,6 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/formatting/address"
 	"github.com/ava-labs/avalanchego/vms/platformvm/api"
-	"github.com/ava-labs/avalanchego/vms/platformvm/signer"
 )
 
 // ClientStaker is the representation of a staker sent via client.
@@ -45,7 +44,6 @@ type ClientPermissionlessValidator struct {
 	DelegationFee         float32
 	Uptime                *float32
 	Connected             *bool
-	Signer                *signer.ProofOfPossession
 	// The delegators delegating to this validator
 	Delegators []ClientDelegator
 }
@@ -127,7 +125,6 @@ func getClientPermissionlessValidators(validatorsSliceIntf []interface{}) ([]Cli
 			DelegationFee:         float32(apiValidator.DelegationFee),
 			Uptime:                (*float32)(apiValidator.Uptime),
 			Connected:             &apiValidator.Connected,
-			Signer:                apiValidator.Signer,
 			Delegators:            clientDelegators,
 		}
 	}

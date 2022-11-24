@@ -43,20 +43,15 @@ type signerVisitor struct {
 	tx      *txs.Tx
 }
 
-func (*signerVisitor) AdvanceTimeTx(*txs.AdvanceTimeTx) error {
-	return errUnsupportedTxType
-}
-
-func (*signerVisitor) RewardValidatorTx(*txs.RewardValidatorTx) error {
-	return errUnsupportedTxType
-}
+func (*signerVisitor) AdvanceTimeTx(*txs.AdvanceTimeTx) error         { return errUnsupportedTxType }
+func (*signerVisitor) RewardValidatorTx(*txs.RewardValidatorTx) error { return errUnsupportedTxType }
 
 func (s *signerVisitor) AddValidatorTx(tx *txs.AddValidatorTx) error {
 	txSigners, err := s.getSigners(constants.PlatformChainID, tx.Ins)
 	if err != nil {
 		return err
 	}
-	return sign(s.tx, txSigners)
+	return s.sign(s.tx, txSigners)
 }
 
 func (s *signerVisitor) AddSubnetValidatorTx(tx *txs.AddSubnetValidatorTx) error {
@@ -69,7 +64,7 @@ func (s *signerVisitor) AddSubnetValidatorTx(tx *txs.AddSubnetValidatorTx) error
 		return err
 	}
 	txSigners = append(txSigners, subnetAuthSigners)
-	return sign(s.tx, txSigners)
+	return s.sign(s.tx, txSigners)
 }
 
 func (s *signerVisitor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
@@ -77,7 +72,7 @@ func (s *signerVisitor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
 	if err != nil {
 		return err
 	}
-	return sign(s.tx, txSigners)
+	return s.sign(s.tx, txSigners)
 }
 
 func (s *signerVisitor) CreateChainTx(tx *txs.CreateChainTx) error {
@@ -90,7 +85,7 @@ func (s *signerVisitor) CreateChainTx(tx *txs.CreateChainTx) error {
 		return err
 	}
 	txSigners = append(txSigners, subnetAuthSigners)
-	return sign(s.tx, txSigners)
+	return s.sign(s.tx, txSigners)
 }
 
 func (s *signerVisitor) CreateSubnetTx(tx *txs.CreateSubnetTx) error {
@@ -98,7 +93,7 @@ func (s *signerVisitor) CreateSubnetTx(tx *txs.CreateSubnetTx) error {
 	if err != nil {
 		return err
 	}
-	return sign(s.tx, txSigners)
+	return s.sign(s.tx, txSigners)
 }
 
 func (s *signerVisitor) ImportTx(tx *txs.ImportTx) error {
@@ -111,7 +106,7 @@ func (s *signerVisitor) ImportTx(tx *txs.ImportTx) error {
 		return err
 	}
 	txSigners = append(txSigners, txImportSigners...)
-	return sign(s.tx, txSigners)
+	return s.sign(s.tx, txSigners)
 }
 
 func (s *signerVisitor) ExportTx(tx *txs.ExportTx) error {
@@ -119,7 +114,7 @@ func (s *signerVisitor) ExportTx(tx *txs.ExportTx) error {
 	if err != nil {
 		return err
 	}
-	return sign(s.tx, txSigners)
+	return s.sign(s.tx, txSigners)
 }
 
 func (s *signerVisitor) RemoveSubnetValidatorTx(tx *txs.RemoveSubnetValidatorTx) error {
@@ -132,7 +127,7 @@ func (s *signerVisitor) RemoveSubnetValidatorTx(tx *txs.RemoveSubnetValidatorTx)
 		return err
 	}
 	txSigners = append(txSigners, subnetAuthSigners)
-	return sign(s.tx, txSigners)
+	return s.sign(s.tx, txSigners)
 }
 
 func (s *signerVisitor) TransformSubnetTx(tx *txs.TransformSubnetTx) error {
@@ -145,7 +140,7 @@ func (s *signerVisitor) TransformSubnetTx(tx *txs.TransformSubnetTx) error {
 		return err
 	}
 	txSigners = append(txSigners, subnetAuthSigners)
-	return sign(s.tx, txSigners)
+	return s.sign(s.tx, txSigners)
 }
 
 func (s *signerVisitor) AddPermissionlessValidatorTx(tx *txs.AddPermissionlessValidatorTx) error {
@@ -153,7 +148,7 @@ func (s *signerVisitor) AddPermissionlessValidatorTx(tx *txs.AddPermissionlessVa
 	if err != nil {
 		return err
 	}
-	return sign(s.tx, txSigners)
+	return s.sign(s.tx, txSigners)
 }
 
 func (s *signerVisitor) AddPermissionlessDelegatorTx(tx *txs.AddPermissionlessDelegatorTx) error {
@@ -161,7 +156,7 @@ func (s *signerVisitor) AddPermissionlessDelegatorTx(tx *txs.AddPermissionlessDe
 	if err != nil {
 		return err
 	}
-	return sign(s.tx, txSigners)
+	return s.sign(s.tx, txSigners)
 }
 
 func (s *signerVisitor) getSigners(sourceChainID ids.ID, ins []*avax.TransferableInput) ([][]keychain.Signer, error) {
@@ -261,7 +256,7 @@ func (s *signerVisitor) getSubnetSigners(subnetID ids.ID, subnetAuth verify.Veri
 	return authSigners, nil
 }
 
-func sign(tx *txs.Tx, txSigners [][]keychain.Signer) error {
+func (s *signerVisitor) sign(tx *txs.Tx, txSigners [][]keychain.Signer) error {
 	unsignedBytes, err := txs.Codec.Marshal(txs.Version, &tx.Unsigned)
 	if err != nil {
 		return fmt.Errorf("couldn't marshal unsigned tx: %w", err)

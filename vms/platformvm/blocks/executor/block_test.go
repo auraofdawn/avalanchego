@@ -4,7 +4,6 @@
 package executor
 
 import (
-	"context"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -246,7 +245,7 @@ func TestBlockOptions(t *testing.T) {
 			defer ctrl.Finish()
 
 			blk := tt.blkF()
-			options, err := blk.Options(context.Background())
+			options, err := blk.Options()
 			if tt.expectedErr != nil {
 				require.ErrorIs(err, tt.expectedErr)
 				return

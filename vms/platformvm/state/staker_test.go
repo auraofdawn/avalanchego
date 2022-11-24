@@ -4,7 +4,6 @@
 package state
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -13,11 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 )
-
-var errCustom = errors.New("custom")
 
 func TestStakerLess(t *testing.T) {
 	tests := []struct {
@@ -139,9 +135,6 @@ func TestNewCurrentStaker(t *testing.T) {
 
 	txID := ids.GenerateTestID()
 	nodeID := ids.GenerateTestNodeID()
-	sk, err := bls.NewSecretKey()
-	require.NoError(err)
-	publicKey := bls.PublicFromSecretKey(sk)
 	subnetID := ids.GenerateTestID()
 	weight := uint64(12345)
 	startTime := time.Now()
@@ -151,19 +144,16 @@ func TestNewCurrentStaker(t *testing.T) {
 
 	stakerTx := txs.NewMockStaker(ctrl)
 	stakerTx.EXPECT().NodeID().Return(nodeID)
-	stakerTx.EXPECT().PublicKey().Return(publicKey, true, nil)
 	stakerTx.EXPECT().SubnetID().Return(subnetID)
 	stakerTx.EXPECT().Weight().Return(weight)
 	stakerTx.EXPECT().StartTime().Return(startTime)
 	stakerTx.EXPECT().EndTime().Return(endTime)
 	stakerTx.EXPECT().CurrentPriority().Return(currentPriority)
 
-	staker, err := NewCurrentStaker(txID, stakerTx, potentialReward)
+	staker := NewCurrentStaker(txID, stakerTx, potentialReward)
 	require.NotNil(staker)
-	require.NoError(err)
 	require.Equal(txID, staker.TxID)
 	require.Equal(nodeID, staker.NodeID)
-	require.Equal(publicKey, staker.PublicKey)
 	require.Equal(subnetID, staker.SubnetID)
 	require.Equal(weight, staker.Weight)
 	require.Equal(startTime, staker.StartTime)
@@ -171,11 +161,6 @@ func TestNewCurrentStaker(t *testing.T) {
 	require.Equal(potentialReward, staker.PotentialReward)
 	require.Equal(endTime, staker.NextTime)
 	require.Equal(currentPriority, staker.Priority)
-
-	stakerTx.EXPECT().PublicKey().Return(nil, false, errCustom)
-
-	_, err = NewCurrentStaker(txID, stakerTx, potentialReward)
-	require.ErrorIs(err, errCustom)
 }
 
 func TestNewPendingStaker(t *testing.T) {
@@ -185,9 +170,6 @@ func TestNewPendingStaker(t *testing.T) {
 
 	txID := ids.GenerateTestID()
 	nodeID := ids.GenerateTestNodeID()
-	sk, err := bls.NewSecretKey()
-	require.NoError(err)
-	publicKey := bls.PublicFromSecretKey(sk)
 	subnetID := ids.GenerateTestID()
 	weight := uint64(12345)
 	startTime := time.Now()
@@ -196,19 +178,16 @@ func TestNewPendingStaker(t *testing.T) {
 
 	stakerTx := txs.NewMockStaker(ctrl)
 	stakerTx.EXPECT().NodeID().Return(nodeID)
-	stakerTx.EXPECT().PublicKey().Return(publicKey, true, nil)
 	stakerTx.EXPECT().SubnetID().Return(subnetID)
 	stakerTx.EXPECT().Weight().Return(weight)
 	stakerTx.EXPECT().StartTime().Return(startTime)
 	stakerTx.EXPECT().EndTime().Return(endTime)
 	stakerTx.EXPECT().PendingPriority().Return(pendingPriority)
 
-	staker, err := NewPendingStaker(txID, stakerTx)
+	staker := NewPendingStaker(txID, stakerTx)
 	require.NotNil(staker)
-	require.NoError(err)
 	require.Equal(txID, staker.TxID)
 	require.Equal(nodeID, staker.NodeID)
-	require.Equal(publicKey, staker.PublicKey)
 	require.Equal(subnetID, staker.SubnetID)
 	require.Equal(weight, staker.Weight)
 	require.Equal(startTime, staker.StartTime)
@@ -216,9 +195,4 @@ func TestNewPendingStaker(t *testing.T) {
 	require.Zero(staker.PotentialReward)
 	require.Equal(startTime, staker.NextTime)
 	require.Equal(pendingPriority, staker.Priority)
-
-	stakerTx.EXPECT().PublicKey().Return(nil, false, errCustom)
-
-	_, err = NewPendingStaker(txID, stakerTx)
-	require.ErrorIs(err, errCustom)
 }

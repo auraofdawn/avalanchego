@@ -120,9 +120,7 @@ func (lh *linkedHashmap[K, V]) delete(key K) {
 	}
 }
 
-func (lh *linkedHashmap[K, V]) len() int {
-	return len(lh.entryMap)
-}
+func (lh *linkedHashmap[K, V]) len() int { return len(lh.entryMap) }
 
 func (lh *linkedHashmap[K, V]) oldest() (K, V, bool) {
 	if val := lh.entryList.Front(); val != nil {

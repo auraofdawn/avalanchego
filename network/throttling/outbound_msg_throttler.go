@@ -212,8 +212,6 @@ func NewNoOutboundThrottler() OutboundMsgThrottler {
 // [Acquire] always returns true. [Release] does nothing.
 type noOutboundMsgThrottler struct{}
 
-func (*noOutboundMsgThrottler) Acquire(message.OutboundMessage, ids.NodeID) bool {
-	return true
-}
+func (*noOutboundMsgThrottler) Acquire(message.OutboundMessage, ids.NodeID) bool { return true }
 
 func (*noOutboundMsgThrottler) Release(message.OutboundMessage, ids.NodeID) {}

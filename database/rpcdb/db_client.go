@@ -92,9 +92,7 @@ func (db *DatabaseClient) Delete(key []byte) error {
 }
 
 // NewBatch returns a new batch
-func (db *DatabaseClient) NewBatch() database.Batch {
-	return &batch{db: db}
-}
+func (db *DatabaseClient) NewBatch() database.Batch { return &batch{db: db} }
 
 func (db *DatabaseClient) NewIterator() database.Iterator {
 	return db.NewIteratorWithStartAndPrefix(nil, nil)
@@ -145,8 +143,8 @@ func (db *DatabaseClient) Close() error {
 	return errCodeToError[resp.Err]
 }
 
-func (db *DatabaseClient) HealthCheck(ctx context.Context) (interface{}, error) {
-	health, err := db.client.HealthCheck(ctx, &emptypb.Empty{})
+func (db *DatabaseClient) HealthCheck() (interface{}, error) {
+	health, err := db.client.HealthCheck(context.Background(), &emptypb.Empty{})
 	if err != nil {
 		return nil, err
 	}
@@ -178,9 +176,7 @@ func (b *batch) Delete(key []byte) error {
 	return nil
 }
 
-func (b *batch) Size() int {
-	return b.size
-}
+func (b *batch) Size() int { return b.size }
 
 func (b *batch) Write() error {
 	request := &rpcdbpb.WriteBatchRequest{
@@ -254,9 +250,7 @@ func (b *batch) Replay(w database.KeyValueWriterDeleter) error {
 	return nil
 }
 
-func (b *batch) Inner() database.Batch {
-	return b
-}
+func (b *batch) Inner() database.Batch { return b }
 
 type iterator struct {
 	db *DatabaseClient

@@ -4,7 +4,6 @@ name: build-win-release
 
 # Controls when the action will run.
 on:
-  workflow_dispatch:
   push:
     tags:
       - "*" # Push events to every tag

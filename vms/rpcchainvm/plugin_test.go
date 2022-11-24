@@ -13,7 +13,6 @@ import (
 
 	plugin "github.com/hashicorp/go-plugin"
 
-	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/rpcchainvm/grpcutils"
 )
 
@@ -32,7 +31,7 @@ const (
 
 var (
 	TestHandshake = plugin.HandshakeConfig{
-		ProtocolVersion:  version.RPCChainVMProtocol,
+		ProtocolVersion:  protocolVersion,
 		MagicCookieKey:   "VM_PLUGIN",
 		MagicCookieValue: "dynamic",
 	}

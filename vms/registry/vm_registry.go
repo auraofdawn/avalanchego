@@ -3,11 +3,7 @@
 
 package registry
 
-import (
-	"context"
-
-	"github.com/ava-labs/avalanchego/ids"
-)
+import "github.com/ava-labs/avalanchego/ids"
 
 var _ VMRegistry = (*vmRegistry)(nil)
 
@@ -15,10 +11,10 @@ var _ VMRegistry = (*vmRegistry)(nil)
 // and install them if they're not already installed.
 type VMRegistry interface {
 	// Reload installs all non-installed vms on the node.
-	Reload(ctx context.Context) ([]ids.ID, map[ids.ID]error, error)
+	Reload() ([]ids.ID, map[ids.ID]error, error)
 	// ReloadWithReadLock installs all non-installed vms on the node assuming
 	// the http read lock is currently held.
-	ReloadWithReadLock(ctx context.Context) ([]ids.ID, map[ids.ID]error, error)
+	ReloadWithReadLock() ([]ids.ID, map[ids.ID]error, error)
 }
 
 // VMRegistryConfig defines configurations for VMRegistry
@@ -38,17 +34,17 @@ func NewVMRegistry(config VMRegistryConfig) VMRegistry {
 	}
 }
 
-func (r *vmRegistry) Reload(ctx context.Context) ([]ids.ID, map[ids.ID]error, error) {
-	return r.reload(ctx, r.config.VMRegisterer)
+func (r *vmRegistry) Reload() ([]ids.ID, map[ids.ID]error, error) {
+	return r.reload(r.config.VMRegisterer)
 }
 
-func (r *vmRegistry) ReloadWithReadLock(ctx context.Context) ([]ids.ID, map[ids.ID]error, error) {
-	return r.reload(ctx, readRegisterer{
+func (r *vmRegistry) ReloadWithReadLock() ([]ids.ID, map[ids.ID]error, error) {
+	return r.reload(readRegisterer{
 		registerer: r.config.VMRegisterer,
 	})
 }
 
-func (r *vmRegistry) reload(ctx context.Context, registerer registerer) ([]ids.ID, map[ids.ID]error, error) {
+func (r *vmRegistry) reload(registerer registerer) ([]ids.ID, map[ids.ID]error, error) {
 	_, unregisteredVMs, err := r.config.VMGetter.Get()
 	if err != nil {
 		return nil, nil, err
@@ -58,7 +54,7 @@ func (r *vmRegistry) reload(ctx context.Context, registerer registerer) ([]ids.I
 	failedVMs := make(map[ids.ID]error)
 
 	for vmID, factory := range unregisteredVMs {
-		if err := registerer.Register(ctx, vmID, factory); err != nil {
+		if err := registerer.Register(vmID, factory); err != nil {
 			failedVMs[vmID] = err
 			continue
 		}

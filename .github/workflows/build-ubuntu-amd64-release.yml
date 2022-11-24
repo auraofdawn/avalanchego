@@ -1,7 +1,6 @@
 name: build-amd64-debian-packages
 
 on:
-  workflow_dispatch:
   push:
     tags:
       - "*"

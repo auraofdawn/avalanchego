@@ -5,7 +5,6 @@ package proposervm
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -21,15 +20,13 @@ import (
 	"github.com/ava-labs/avalanchego/vms/proposervm/proposer"
 )
 
-var _ snowman.OracleBlock = (*TestOptionsBlock)(nil)
-
 type TestOptionsBlock struct {
 	snowman.TestBlock
 	opts    [2]snowman.Block
 	optsErr error
 }
 
-func (tob TestOptionsBlock) Options(context.Context) ([2]snowman.Block, error) {
+func (tob TestOptionsBlock) Options() ([2]snowman.Block, error) {
 	return tob.opts, tob.optsErr
 }
 
@@ -71,10 +68,8 @@ func TestBlockVerify_PostForkOption_ParentChecks(t *testing.T) {
 		},
 	}
 
-	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
-		return oracleCoreBlk, nil
-	}
-	coreVM.GetBlockF = func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
+	coreVM.BuildBlockF = func() (snowman.Block, error) { return oracleCoreBlk, nil }
+	coreVM.GetBlockF = func(blkID ids.ID) (snowman.Block, error) {
 		switch blkID {
 		case coreGenBlk.ID():
 			return coreGenBlk, nil
@@ -88,7 +83,7 @@ func TestBlockVerify_PostForkOption_ParentChecks(t *testing.T) {
 			return nil, database.ErrNotFound
 		}
 	}
-	coreVM.ParseBlockF = func(_ context.Context, b []byte) (snowman.Block, error) {
+	coreVM.ParseBlockF = func(b []byte) (snowman.Block, error) {
 		switch {
 		case bytes.Equal(b, coreGenBlk.Bytes()):
 			return coreGenBlk, nil
@@ -103,15 +98,15 @@ func TestBlockVerify_PostForkOption_ParentChecks(t *testing.T) {
 		}
 	}
 
-	parentBlk, err := proVM.BuildBlock(context.Background())
+	parentBlk, err := proVM.BuildBlock()
 	if err != nil {
 		t.Fatal("could not build post fork oracle block")
 	}
 
-	if err := parentBlk.Verify(context.Background()); err != nil {
+	if err := parentBlk.Verify(); err != nil {
 		t.Fatal(err)
 	}
-	if err := proVM.SetPreference(context.Background(), parentBlk.ID()); err != nil {
+	if err := proVM.SetPreference(parentBlk.ID()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -120,7 +115,7 @@ func TestBlockVerify_PostForkOption_ParentChecks(t *testing.T) {
 	if !ok {
 		t.Fatal("expected post fork block")
 	}
-	opts, err := postForkOracleBlk.Options(context.Background())
+	opts, err := postForkOracleBlk.Options()
 	if err != nil {
 		t.Fatal("could not retrieve options from post fork oracle block")
 	}
@@ -129,15 +124,15 @@ func TestBlockVerify_PostForkOption_ParentChecks(t *testing.T) {
 	}
 
 	// ... and verify them
-	if err := opts[0].Verify(context.Background()); err != nil {
+	if err := opts[0].Verify(); err != nil {
 		t.Fatal("option 0 should verify")
 	}
-	if err := opts[1].Verify(context.Background()); err != nil {
+	if err := opts[1].Verify(); err != nil {
 		t.Fatal("option 1 should verify")
 	}
 
 	// show we can build on options
-	if err := proVM.SetPreference(context.Background(), opts[0].ID()); err != nil {
+	if err := proVM.SetPreference(opts[0].ID()); err != nil {
 		t.Fatal("could not set preference")
 	}
 
@@ -150,19 +145,17 @@ func TestBlockVerify_PostForkOption_ParentChecks(t *testing.T) {
 		BytesV:     []byte{4},
 		TimestampV: oracleCoreBlk.opts[0].Timestamp().Add(proposer.MaxDelay),
 	}
-	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
-		return childCoreBlk, nil
-	}
+	coreVM.BuildBlockF = func() (snowman.Block, error) { return childCoreBlk, nil }
 	proVM.Set(childCoreBlk.Timestamp())
 
-	proChild, err := proVM.BuildBlock(context.Background())
+	proChild, err := proVM.BuildBlock()
 	if err != nil {
 		t.Fatal("could not build on top of option")
 	}
 	if _, ok := proChild.(*postForkBlock); !ok {
 		t.Fatal("unexpected block type")
 	}
-	if err := proChild.Verify(context.Background()); err != nil {
+	if err := proChild.Verify(); err != nil {
 		t.Fatal("block built on option does not verify")
 	}
 }
@@ -208,10 +201,8 @@ func TestBlockVerify_PostForkOption_CoreBlockVerifyIsCalledOnce(t *testing.T) {
 		coreOpt1,
 	}
 
-	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
-		return oracleCoreBlk, nil
-	}
-	coreVM.GetBlockF = func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
+	coreVM.BuildBlockF = func() (snowman.Block, error) { return oracleCoreBlk, nil }
+	coreVM.GetBlockF = func(blkID ids.ID) (snowman.Block, error) {
 		switch blkID {
 		case coreGenBlk.ID():
 			return coreGenBlk, nil
@@ -225,7 +216,7 @@ func TestBlockVerify_PostForkOption_CoreBlockVerifyIsCalledOnce(t *testing.T) {
 			return nil, database.ErrNotFound
 		}
 	}
-	coreVM.ParseBlockF = func(_ context.Context, b []byte) (snowman.Block, error) {
+	coreVM.ParseBlockF = func(b []byte) (snowman.Block, error) {
 		switch {
 		case bytes.Equal(b, coreGenBlk.Bytes()):
 			return coreGenBlk, nil
@@ -240,15 +231,15 @@ func TestBlockVerify_PostForkOption_CoreBlockVerifyIsCalledOnce(t *testing.T) {
 		}
 	}
 
-	parentBlk, err := proVM.BuildBlock(context.Background())
+	parentBlk, err := proVM.BuildBlock()
 	if err != nil {
 		t.Fatal("could not build post fork oracle block")
 	}
 
-	if err := parentBlk.Verify(context.Background()); err != nil {
+	if err := parentBlk.Verify(); err != nil {
 		t.Fatal(err)
 	}
-	if err := proVM.SetPreference(context.Background(), parentBlk.ID()); err != nil {
+	if err := proVM.SetPreference(parentBlk.ID()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -257,7 +248,7 @@ func TestBlockVerify_PostForkOption_CoreBlockVerifyIsCalledOnce(t *testing.T) {
 	if !ok {
 		t.Fatal("expected post fork block")
 	}
-	opts, err := postForkOracleBlk.Options(context.Background())
+	opts, err := postForkOracleBlk.Options()
 	if err != nil {
 		t.Fatal("could not retrieve options from post fork oracle block")
 	}
@@ -266,10 +257,10 @@ func TestBlockVerify_PostForkOption_CoreBlockVerifyIsCalledOnce(t *testing.T) {
 	}
 
 	// ... and verify them the first time
-	if err := opts[0].Verify(context.Background()); err != nil {
+	if err := opts[0].Verify(); err != nil {
 		t.Fatal("option 0 should verify")
 	}
-	if err := opts[1].Verify(context.Background()); err != nil {
+	if err := opts[1].Verify(); err != nil {
 		t.Fatal("option 1 should verify")
 	}
 
@@ -278,10 +269,10 @@ func TestBlockVerify_PostForkOption_CoreBlockVerifyIsCalledOnce(t *testing.T) {
 	coreOpt1.VerifyV = errors.New("core block verify should only be called once")
 
 	// ... and verify them again. They verify without call to innerBlk
-	if err := opts[0].Verify(context.Background()); err != nil {
+	if err := opts[0].Verify(); err != nil {
 		t.Fatal("option 0 should verify")
 	}
-	if err := opts[1].Verify(context.Background()); err != nil {
+	if err := opts[1].Verify(); err != nil {
 		t.Fatal("option 1 should verify")
 	}
 }
@@ -324,10 +315,8 @@ func TestBlockAccept_PostForkOption_SetsLastAcceptedBlock(t *testing.T) {
 		},
 	}
 
-	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
-		return oracleCoreBlk, nil
-	}
-	coreVM.GetBlockF = func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
+	coreVM.BuildBlockF = func() (snowman.Block, error) { return oracleCoreBlk, nil }
+	coreVM.GetBlockF = func(blkID ids.ID) (snowman.Block, error) {
 		switch blkID {
 		case coreGenBlk.ID():
 			return coreGenBlk, nil
@@ -341,7 +330,7 @@ func TestBlockAccept_PostForkOption_SetsLastAcceptedBlock(t *testing.T) {
 			return nil, database.ErrNotFound
 		}
 	}
-	coreVM.ParseBlockF = func(_ context.Context, b []byte) (snowman.Block, error) {
+	coreVM.ParseBlockF = func(b []byte) (snowman.Block, error) {
 		switch {
 		case bytes.Equal(b, coreGenBlk.Bytes()):
 			return coreGenBlk, nil
@@ -356,23 +345,23 @@ func TestBlockAccept_PostForkOption_SetsLastAcceptedBlock(t *testing.T) {
 		}
 	}
 
-	parentBlk, err := proVM.BuildBlock(context.Background())
+	parentBlk, err := proVM.BuildBlock()
 	if err != nil {
 		t.Fatal("could not build post fork oracle block")
 	}
 
 	// accept oracle block
-	if err := parentBlk.Accept(context.Background()); err != nil {
+	if err := parentBlk.Accept(); err != nil {
 		t.Fatal("could not accept block")
 	}
 
-	coreVM.LastAcceptedF = func(context.Context) (ids.ID, error) {
+	coreVM.LastAcceptedF = func() (ids.ID, error) {
 		if oracleCoreBlk.Status() == choices.Accepted {
 			return oracleCoreBlk.ID(), nil
 		}
 		return coreGenBlk.ID(), nil
 	}
-	if acceptedID, err := proVM.LastAccepted(context.Background()); err != nil {
+	if acceptedID, err := proVM.LastAccepted(); err != nil {
 		t.Fatal("could not retrieve last accepted block")
 	} else if acceptedID != parentBlk.ID() {
 		t.Fatal("unexpected last accepted ID")
@@ -383,22 +372,22 @@ func TestBlockAccept_PostForkOption_SetsLastAcceptedBlock(t *testing.T) {
 	if !ok {
 		t.Fatal("expected post fork block")
 	}
-	opts, err := postForkOracleBlk.Options(context.Background())
+	opts, err := postForkOracleBlk.Options()
 	if err != nil {
 		t.Fatal("could not retrieve options from post fork oracle block")
 	}
 
-	if err := opts[0].Accept(context.Background()); err != nil {
+	if err := opts[0].Accept(); err != nil {
 		t.Fatal("could not accept option")
 	}
 
-	coreVM.LastAcceptedF = func(context.Context) (ids.ID, error) {
+	coreVM.LastAcceptedF = func() (ids.ID, error) {
 		if oracleCoreBlk.opts[0].Status() == choices.Accepted {
 			return oracleCoreBlk.opts[0].ID(), nil
 		}
 		return oracleCoreBlk.ID(), nil
 	}
-	if acceptedID, err := proVM.LastAccepted(context.Background()); err != nil {
+	if acceptedID, err := proVM.LastAccepted(); err != nil {
 		t.Fatal("could not retrieve last accepted block")
 	} else if acceptedID != opts[0].ID() {
 		t.Fatal("unexpected last accepted ID")
@@ -444,10 +433,8 @@ func TestBlockReject_InnerBlockIsNotRejected(t *testing.T) {
 		},
 	}
 
-	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
-		return oracleCoreBlk, nil
-	}
-	coreVM.GetBlockF = func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
+	coreVM.BuildBlockF = func() (snowman.Block, error) { return oracleCoreBlk, nil }
+	coreVM.GetBlockF = func(blkID ids.ID) (snowman.Block, error) {
 		switch blkID {
 		case coreGenBlk.ID():
 			return coreGenBlk, nil
@@ -461,7 +448,7 @@ func TestBlockReject_InnerBlockIsNotRejected(t *testing.T) {
 			return nil, database.ErrNotFound
 		}
 	}
-	coreVM.ParseBlockF = func(_ context.Context, b []byte) (snowman.Block, error) {
+	coreVM.ParseBlockF = func(b []byte) (snowman.Block, error) {
 		switch {
 		case bytes.Equal(b, coreGenBlk.Bytes()):
 			return coreGenBlk, nil
@@ -476,13 +463,13 @@ func TestBlockReject_InnerBlockIsNotRejected(t *testing.T) {
 		}
 	}
 
-	builtBlk, err := proVM.BuildBlock(context.Background())
+	builtBlk, err := proVM.BuildBlock()
 	if err != nil {
 		t.Fatal("could not build post fork oracle block")
 	}
 
 	// reject oracle block
-	if err := builtBlk.Reject(context.Background()); err != nil {
+	if err := builtBlk.Reject(); err != nil {
 		t.Fatal("could not reject block")
 	}
 	proBlk, ok := builtBlk.(*postForkBlock)
@@ -503,12 +490,12 @@ func TestBlockReject_InnerBlockIsNotRejected(t *testing.T) {
 	if !ok {
 		t.Fatal("expected post fork block")
 	}
-	opts, err := postForkOracleBlk.Options(context.Background())
+	opts, err := postForkOracleBlk.Options()
 	if err != nil {
 		t.Fatal("could not retrieve options from post fork oracle block")
 	}
 
-	if err := opts[0].Reject(context.Background()); err != nil {
+	if err := opts[0].Reject(); err != nil {
 		t.Fatal("could not accept option")
 	}
 	proOpt, ok := opts[0].(*postForkOption)
@@ -554,10 +541,8 @@ func TestBlockVerify_PostForkOption_ParentIsNotOracleWithError(t *testing.T) {
 		TimestampV: coreBlk.Timestamp(),
 	}
 
-	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
-		return coreBlk, nil
-	}
-	coreVM.GetBlockF = func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
+	coreVM.BuildBlockF = func() (snowman.Block, error) { return coreBlk, nil }
+	coreVM.GetBlockF = func(blkID ids.ID) (snowman.Block, error) {
 		switch blkID {
 		case coreGenBlk.ID():
 			return coreGenBlk, nil
@@ -569,7 +554,7 @@ func TestBlockVerify_PostForkOption_ParentIsNotOracleWithError(t *testing.T) {
 			return nil, database.ErrNotFound
 		}
 	}
-	coreVM.ParseBlockF = func(_ context.Context, b []byte) (snowman.Block, error) {
+	coreVM.ParseBlockF = func(b []byte) (snowman.Block, error) {
 		switch {
 		case bytes.Equal(b, coreGenBlk.Bytes()):
 			return coreGenBlk, nil
@@ -582,7 +567,7 @@ func TestBlockVerify_PostForkOption_ParentIsNotOracleWithError(t *testing.T) {
 		}
 	}
 
-	parentBlk, err := proVM.BuildBlock(context.Background())
+	parentBlk, err := proVM.BuildBlock()
 	if err != nil {
 		t.Fatal("could not build post fork oracle block")
 	}
@@ -591,7 +576,7 @@ func TestBlockVerify_PostForkOption_ParentIsNotOracleWithError(t *testing.T) {
 	if !ok {
 		t.Fatal("expected post fork block")
 	}
-	_, err = postForkBlk.Options(context.Background())
+	_, err = postForkBlk.Options()
 	if err != snowman.ErrNotOracle {
 		t.Fatal("should have reported that the block isn't an oracle block")
 	}
@@ -605,13 +590,13 @@ func TestBlockVerify_PostForkOption_ParentIsNotOracleWithError(t *testing.T) {
 		t.Fatal("failed to build new child block")
 	}
 
-	invalidChild, err := proVM.ParseBlock(context.Background(), statelessChild.Bytes())
+	invalidChild, err := proVM.ParseBlock(statelessChild.Bytes())
 	if err != nil {
 		// A failure to parse is okay here
 		return
 	}
 
-	err = invalidChild.Verify(context.Background())
+	err = invalidChild.Verify()
 	if err == nil {
 		t.Fatal("Should have failed to verify a child that should have been signed")
 	}
@@ -663,7 +648,7 @@ func TestOptionTimestampValidity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	coreVM.GetBlockF = func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
+	coreVM.GetBlockF = func(blkID ids.ID) (snowman.Block, error) {
 		switch blkID {
 		case coreGenBlk.ID():
 			return coreGenBlk, nil
@@ -677,7 +662,7 @@ func TestOptionTimestampValidity(t *testing.T) {
 			return nil, errUnknownBlock
 		}
 	}
-	coreVM.ParseBlockF = func(_ context.Context, b []byte) (snowman.Block, error) {
+	coreVM.ParseBlockF = func(b []byte) (snowman.Block, error) {
 		switch {
 		case bytes.Equal(b, coreGenBlk.Bytes()):
 			return coreGenBlk, nil
@@ -692,12 +677,12 @@ func TestOptionTimestampValidity(t *testing.T) {
 		}
 	}
 
-	statefulBlock, err := proVM.ParseBlock(context.Background(), statelessBlock.Bytes())
+	statefulBlock, err := proVM.ParseBlock(statelessBlock.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := statefulBlock.Verify(context.Background()); err != nil {
+	if err := statefulBlock.Verify(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -706,25 +691,25 @@ func TestOptionTimestampValidity(t *testing.T) {
 		t.Fatal("should have reported as an oracle block")
 	}
 
-	options, err := statefulOracleBlock.Options(context.Background())
+	options, err := statefulOracleBlock.Options()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	option := options[0]
-	if err := option.Verify(context.Background()); err != nil {
+	if err := option.Verify(); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := statefulBlock.Accept(context.Background()); err != nil {
+	if err := statefulBlock.Accept(); err != nil {
 		t.Fatal(err)
 	}
 
-	coreVM.GetBlockF = func(context.Context, ids.ID) (snowman.Block, error) {
+	coreVM.GetBlockF = func(blkID ids.ID) (snowman.Block, error) {
 		t.Fatal("called GetBlock when unable to handle the error")
 		return nil, nil
 	}
-	coreVM.ParseBlockF = func(context.Context, []byte) (snowman.Block, error) {
+	coreVM.ParseBlockF = func(b []byte) (snowman.Block, error) {
 		t.Fatal("called ParseBlock when unable to handle the error")
 		return nil, nil
 	}
@@ -734,17 +719,16 @@ func TestOptionTimestampValidity(t *testing.T) {
 		t.Fatalf("wrong time returned expected %s got %s", expectedTime, optionTime)
 	}
 
-	if err := option.Accept(context.Background()); err != nil {
+	if err := option.Accept(); err != nil {
 		t.Fatal(err)
 	}
 
 	// Restart the node.
 
 	ctx := proVM.ctx
-	proVM = New(coreVM, time.Time{}, 0, DefaultMinBlockDelay)
+	proVM = New(coreVM, time.Time{}, 0)
 
 	coreVM.InitializeF = func(
-		context.Context,
 		*snow.Context,
 		manager.Manager,
 		[]byte,
@@ -756,11 +740,9 @@ func TestOptionTimestampValidity(t *testing.T) {
 	) error {
 		return nil
 	}
-	coreVM.LastAcceptedF = func(context.Context) (ids.ID, error) {
-		return coreOracleBlk.opts[0].ID(), nil
-	}
+	coreVM.LastAcceptedF = func() (ids.ID, error) { return coreOracleBlk.opts[0].ID(), nil }
 
-	coreVM.GetBlockF = func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
+	coreVM.GetBlockF = func(blkID ids.ID) (snowman.Block, error) {
 		switch blkID {
 		case coreGenBlk.ID():
 			return coreGenBlk, nil
@@ -774,7 +756,7 @@ func TestOptionTimestampValidity(t *testing.T) {
 			return nil, errUnknownBlock
 		}
 	}
-	coreVM.ParseBlockF = func(_ context.Context, b []byte) (snowman.Block, error) {
+	coreVM.ParseBlockF = func(b []byte) (snowman.Block, error) {
 		switch {
 		case bytes.Equal(b, coreGenBlk.Bytes()):
 			return coreGenBlk, nil
@@ -789,22 +771,11 @@ func TestOptionTimestampValidity(t *testing.T) {
 		}
 	}
 
-	err = proVM.Initialize(
-		context.Background(),
-		ctx,
-		db,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-	)
-	if err != nil {
+	if err := proVM.Initialize(ctx, db, nil, nil, nil, nil, nil, nil); err != nil {
 		t.Fatalf("failed to initialize proposerVM with %s", err)
 	}
 
-	statefulOptionBlock, err := proVM.ParseBlock(context.Background(), option.Bytes())
+	statefulOptionBlock, err := proVM.ParseBlock(option.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -813,11 +784,11 @@ func TestOptionTimestampValidity(t *testing.T) {
 		t.Fatalf("wrong status returned expected %s got %s", choices.Accepted, status)
 	}
 
-	coreVM.GetBlockF = func(context.Context, ids.ID) (snowman.Block, error) {
+	coreVM.GetBlockF = func(blkID ids.ID) (snowman.Block, error) {
 		t.Fatal("called GetBlock when unable to handle the error")
 		return nil, nil
 	}
-	coreVM.ParseBlockF = func(context.Context, []byte) (snowman.Block, error) {
+	coreVM.ParseBlockF = func(b []byte) (snowman.Block, error) {
 		t.Fatal("called ParseBlock when unable to handle the error")
 		return nil, nil
 	}

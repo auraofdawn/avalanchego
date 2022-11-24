@@ -4,7 +4,6 @@
 package builder
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -76,11 +75,11 @@ func TestAtomicTxImports(t *testing.T) {
 	require.NoError(err)
 
 	require.NoError(env.Builder.Add(tx))
-	b, err := env.Builder.BuildBlock(context.Background())
+	b, err := env.Builder.BuildBlock()
 	require.NoError(err)
 	// Test multiple verify calls work
-	require.NoError(b.Verify(context.Background()))
-	require.NoError(b.Accept(context.Background()))
+	require.NoError(b.Verify())
+	require.NoError(b.Accept())
 	_, txStatus, err := env.state.GetTx(tx.ID())
 	require.NoError(err)
 	// Ensure transaction is in the committed state

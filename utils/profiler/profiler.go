@@ -52,9 +52,7 @@ type profiler struct {
 	cpuProfileFile *os.File
 }
 
-func New(dir string) Profiler {
-	return new(dir)
-}
+func New(dir string) Profiler { return new(dir) }
 
 func new(dir string) *profiler {
 	return &profiler{
