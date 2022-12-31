@@ -8,6 +8,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 )
 
@@ -26,7 +27,7 @@ type AdvanceTimeTx struct {
 	unsignedBytes []byte // Unsigned byte representation of this data
 }
 
-func (tx *AdvanceTimeTx) Initialize(unsignedBytes []byte) {
+func (tx *AdvanceTimeTx) SetBytes(unsignedBytes []byte) {
 	tx.unsignedBytes = unsignedBytes
 }
 
@@ -41,7 +42,7 @@ func (tx *AdvanceTimeTx) Timestamp() time.Time {
 	return time.Unix(int64(tx.Time), 0)
 }
 
-func (*AdvanceTimeTx) InputIDs() ids.Set {
+func (*AdvanceTimeTx) InputIDs() set.Set[ids.ID] {
 	return nil
 }
 

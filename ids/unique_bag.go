@@ -6,22 +6,26 @@ package ids
 import (
 	"fmt"
 	"strings"
+
+	"golang.org/x/exp/maps"
+
+	"github.com/ava-labs/avalanchego/utils/set"
 )
 
 const (
 	minUniqueBagSize = 16
 )
 
-type UniqueBag map[ID]BitSet64
+type UniqueBag map[ID]set.Bits64
 
 func (b *UniqueBag) init() {
 	if *b == nil {
-		*b = make(map[ID]BitSet64, minUniqueBagSize)
+		*b = make(map[ID]set.Bits64, minUniqueBagSize)
 	}
 }
 
 func (b *UniqueBag) Add(setID uint, idSet ...ID) {
-	bs := BitSet64(0)
+	bs := set.Bits64(0)
 	bs.Add(setID)
 
 	for _, id := range idSet {
@@ -29,7 +33,7 @@ func (b *UniqueBag) Add(setID uint, idSet ...ID) {
 	}
 }
 
-func (b *UniqueBag) UnionSet(id ID, set BitSet64) {
+func (b *UniqueBag) UnionSet(id ID, set set.Bits64) {
 	b.init()
 
 	previousSet := (*b)[id]
@@ -37,7 +41,7 @@ func (b *UniqueBag) UnionSet(id ID, set BitSet64) {
 	(*b)[id] = previousSet
 }
 
-func (b *UniqueBag) DifferenceSet(id ID, set BitSet64) {
+func (b *UniqueBag) DifferenceSet(id ID, set set.Bits64) {
 	b.init()
 
 	previousSet := (*b)[id]
@@ -56,7 +60,7 @@ func (b *UniqueBag) Difference(diff *UniqueBag) {
 	}
 }
 
-func (b *UniqueBag) GetSet(id ID) BitSet64 {
+func (b *UniqueBag) GetSet(id ID) set.Bits64 {
 	return (*b)[id]
 }
 
@@ -65,13 +69,7 @@ func (b *UniqueBag) RemoveSet(id ID) {
 }
 
 func (b *UniqueBag) List() []ID {
-	idList := make([]ID, len(*b))
-	i := 0
-	for id := range *b {
-		idList[i] = id
-		i++
-	}
-	return idList
+	return maps.Keys(*b)
 }
 
 func (b *UniqueBag) Bag(alpha int) Bag {
@@ -101,7 +99,5 @@ func (b *UniqueBag) String() string {
 }
 
 func (b *UniqueBag) Clear() {
-	for id := range *b {
-		delete(*b, id)
-	}
+	maps.Clear(*b)
 }

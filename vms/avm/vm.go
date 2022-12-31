@@ -32,6 +32,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow/engine/common"
 	"github.com/ava-labs/avalanchego/utils/crypto"
 	"github.com/ava-labs/avalanchego/utils/json"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/timer"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/version"
@@ -570,7 +571,7 @@ func (vm *VM) verifyFxUsage(fxID int, assetID ids.ID) bool {
 	// Check cache to see whether this asset supports this fx
 	fxIDsIntf, assetInCache := vm.assetToFxCache.Get(assetID)
 	if assetInCache {
-		return fxIDsIntf.(ids.BitSet64).Contains(uint(fxID))
+		return fxIDsIntf.(set.Bits64).Contains(uint(fxID))
 	}
 	// Caches doesn't say whether this asset support this fx.
 	// Get the tx that created the asset and check.
@@ -586,7 +587,7 @@ func (vm *VM) verifyFxUsage(fxID int, assetID ids.ID) bool {
 		// This transaction was not an asset creation tx
 		return false
 	}
-	fxIDs := ids.BitSet64(0)
+	fxIDs := set.Bits64(0)
 	for _, state := range createAssetTx.States {
 		if state.FxIndex == uint32(fxID) {
 			// Cache that this asset supports this fx
@@ -663,7 +664,7 @@ func (vm *VM) verifyOperation(tx *txs.OperationTx, op *txs.Operation, cred verif
 func (vm *VM) LoadUser(
 	username string,
 	password string,
-	addrsToUse ids.ShortSet,
+	addrsToUse set.Set[ids.ShortID],
 ) (
 	[]*avax.UTXO,
 	*secp256k1fx.Keychain,

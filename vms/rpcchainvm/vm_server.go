@@ -6,6 +6,7 @@ package rpcchainvm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/ids/galiasreader"
 	"github.com/ava-labs/avalanchego/snow"
+	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
 	"github.com/ava-labs/avalanchego/snow/engine/common/appsender"
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
@@ -33,9 +35,9 @@ import (
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/avalanchego/version"
+	"github.com/ava-labs/avalanchego/vms/platformvm/teleporter/gteleporter"
 	"github.com/ava-labs/avalanchego/vms/rpcchainvm/ghttp"
 	"github.com/ava-labs/avalanchego/vms/rpcchainvm/grpcutils"
-	"github.com/ava-labs/avalanchego/vms/rpcchainvm/gsubnetlookup"
 	"github.com/ava-labs/avalanchego/vms/rpcchainvm/messenger"
 
 	aliasreaderpb "github.com/ava-labs/avalanchego/proto/pb/aliasreader"
@@ -45,19 +47,27 @@ import (
 	messengerpb "github.com/ava-labs/avalanchego/proto/pb/messenger"
 	rpcdbpb "github.com/ava-labs/avalanchego/proto/pb/rpcdb"
 	sharedmemorypb "github.com/ava-labs/avalanchego/proto/pb/sharedmemory"
-	subnetlookuppb "github.com/ava-labs/avalanchego/proto/pb/subnetlookup"
+	teleporterpb "github.com/ava-labs/avalanchego/proto/pb/teleporter"
 	validatorstatepb "github.com/ava-labs/avalanchego/proto/pb/validatorstate"
 	vmpb "github.com/ava-labs/avalanchego/proto/pb/vm"
 )
 
-var _ vmpb.VMServer = (*VMServer)(nil)
+var (
+	_ vmpb.VMServer = (*VMServer)(nil)
+
+	errExpectedBlockWithVerifyContext = errors.New("expected block.WithVerifyContext")
+)
 
 // VMServer is a VM that is managed over RPC.
 type VMServer struct {
 	vmpb.UnsafeVMServer
 
-	vm   block.ChainVM
-	hVM  block.HeightIndexedChainVM
+	vm block.ChainVM
+	// If nil, the underlying VM doesn't implement the interface.
+	bVM block.BuildBlockWithContextChainVM
+	// If nil, the underlying VM doesn't implement the interface.
+	hVM block.HeightIndexedChainVM
+	// If nil, the underlying VM doesn't implement the interface.
 	ssVM block.StateSyncableVM
 
 	processMetrics prometheus.Gatherer
@@ -72,10 +82,12 @@ type VMServer struct {
 
 // NewServer returns a vm instance connected to a remote vm instance
 func NewServer(vm block.ChainVM) *VMServer {
+	bVM, _ := vm.(block.BuildBlockWithContextChainVM)
 	hVM, _ := vm.(block.HeightIndexedChainVM)
 	ssVM, _ := vm.(block.StateSyncableVM)
 	return &VMServer{
 		vm:   vm,
+		bVM:  bVM,
 		hVM:  hVM,
 		ssVM: ssVM,
 	}
@@ -95,6 +107,10 @@ func (vm *VMServer) Initialize(ctx context.Context, req *vmpb.InitializeRequest)
 		return nil, err
 	}
 	xChainID, err := ids.ToID(req.XChainId)
+	if err != nil {
+		return nil, err
+	}
+	cChainID, err := ids.ToID(req.CChainId)
 	if err != nil {
 		return nil, err
 	}
@@ -170,9 +186,9 @@ func (vm *VMServer) Initialize(ctx context.Context, req *vmpb.InitializeRequest)
 	keystoreClient := gkeystore.NewClient(keystorepb.NewKeystoreClient(clientConn))
 	sharedMemoryClient := gsharedmemory.NewClient(sharedmemorypb.NewSharedMemoryClient(clientConn))
 	bcLookupClient := galiasreader.NewClient(aliasreaderpb.NewAliasReaderClient(clientConn))
-	snLookupClient := gsubnetlookup.NewClient(subnetlookuppb.NewSubnetLookupClient(clientConn))
 	appSenderClient := appsender.NewClient(appsenderpb.NewAppSenderClient(clientConn))
 	validatorStateClient := gvalidators.NewClient(validatorstatepb.NewValidatorStateClient(clientConn))
+	teleporterSignerClient := gteleporter.NewClient(teleporterpb.NewSignerClient(clientConn))
 
 	toEngine := make(chan common.Message, 1)
 	vm.closed = make(chan struct{})
@@ -198,17 +214,22 @@ func (vm *VMServer) Initialize(ctx context.Context, req *vmpb.InitializeRequest)
 		NodeID:    nodeID,
 
 		XChainID:    xChainID,
+		CChainID:    cChainID,
 		AVAXAssetID: avaxAssetID,
 
 		Log:          logging.NoLog{},
 		Keystore:     keystoreClient,
 		SharedMemory: sharedMemoryClient,
 		BCLookup:     bcLookupClient,
-		SNLookup:     snLookupClient,
 		Metrics:      metrics.NewOptionalGatherer(),
+
+		// Signs teleporter messages
+		TeleporterSigner: teleporterSignerClient,
 
 		ValidatorState: validatorStateClient,
 		// TODO: support remaining snowman++ fields
+
+		ChainDataDir: req.ChainDataDir,
 	}
 
 	if err := vm.vm.Initialize(ctx, vm.ctx, dbManager, req.GenesisBytes, req.UpgradeBytes, req.ConfigBytes, toEngine, nil, appSenderClient); err != nil {
@@ -300,10 +321,7 @@ func (vm *VMServer) CreateHandlers(ctx context.Context, _ *emptypb.Empty) (*vmpb
 
 		// Start the gRPC server which serves the HTTP service
 		go grpcutils.Serve(serverListener, func(opts []grpc.ServerOption) *grpc.Server {
-			if len(opts) == 0 {
-				opts = append(opts, grpcutils.DefaultServerOptions...)
-			}
-			server := grpc.NewServer(opts...)
+			server := grpcutils.NewDefaultServer(opts)
 			vm.serverCloser.Add(server)
 			httppb.RegisterHTTPServer(server, ghttp.NewServer(handler.Handler))
 			return server
@@ -335,10 +353,7 @@ func (vm *VMServer) CreateStaticHandlers(ctx context.Context, _ *emptypb.Empty) 
 
 		// Start the gRPC server which serves the HTTP service
 		go grpcutils.Serve(serverListener, func(opts []grpc.ServerOption) *grpc.Server {
-			if len(opts) == 0 {
-				opts = append(opts, grpcutils.DefaultServerOptions...)
-			}
-			server := grpc.NewServer(opts...)
+			server := grpcutils.NewDefaultServer(opts)
 			vm.serverCloser.Add(server)
 			httppb.RegisterHTTPServer(server, ghttp.NewServer(handler.Handler))
 			return server
@@ -375,19 +390,43 @@ func (vm *VMServer) Disconnected(ctx context.Context, req *vmpb.DisconnectedRequ
 	return &emptypb.Empty{}, vm.vm.Disconnected(ctx, nodeID)
 }
 
-func (vm *VMServer) BuildBlock(ctx context.Context, _ *emptypb.Empty) (*vmpb.BuildBlockResponse, error) {
-	blk, err := vm.vm.BuildBlock(ctx)
+// If the underlying VM doesn't actually implement this method, its [BuildBlock]
+// method will be called instead.
+func (vm *VMServer) BuildBlock(ctx context.Context, req *vmpb.BuildBlockRequest) (*vmpb.BuildBlockResponse, error) {
+	var (
+		blk snowman.Block
+		err error
+	)
+	if vm.bVM == nil || req.PChainHeight == nil {
+		blk, err = vm.vm.BuildBlock(ctx)
+	} else {
+		blk, err = vm.bVM.BuildBlockWithContext(ctx, &block.Context{
+			PChainHeight: *req.PChainHeight,
+		})
+	}
 	if err != nil {
 		return nil, err
 	}
-	blkID := blk.ID()
-	parentID := blk.Parent()
+
+	blkWithCtx, verifyWithCtx := blk.(block.WithVerifyContext)
+	if verifyWithCtx {
+		verifyWithCtx, err = blkWithCtx.ShouldVerifyWithContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var (
+		blkID    = blk.ID()
+		parentID = blk.Parent()
+	)
 	return &vmpb.BuildBlockResponse{
-		Id:        blkID[:],
-		ParentId:  parentID[:],
-		Bytes:     blk.Bytes(),
-		Height:    blk.Height(),
-		Timestamp: grpcutils.TimestampFromTime(blk.Timestamp()),
+		Id:                blkID[:],
+		ParentId:          parentID[:],
+		Bytes:             blk.Bytes(),
+		Height:            blk.Height(),
+		Timestamp:         grpcutils.TimestampFromTime(blk.Timestamp()),
+		VerifyWithContext: verifyWithCtx,
 	}, nil
 }
 
@@ -396,14 +435,26 @@ func (vm *VMServer) ParseBlock(ctx context.Context, req *vmpb.ParseBlockRequest)
 	if err != nil {
 		return nil, err
 	}
-	blkID := blk.ID()
-	parentID := blk.Parent()
+
+	blkWithCtx, verifyWithCtx := blk.(block.WithVerifyContext)
+	if verifyWithCtx {
+		verifyWithCtx, err = blkWithCtx.ShouldVerifyWithContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var (
+		blkID    = blk.ID()
+		parentID = blk.Parent()
+	)
 	return &vmpb.ParseBlockResponse{
-		Id:        blkID[:],
-		ParentId:  parentID[:],
-		Status:    uint32(blk.Status()),
-		Height:    blk.Height(),
-		Timestamp: grpcutils.TimestampFromTime(blk.Timestamp()),
+		Id:                blkID[:],
+		ParentId:          parentID[:],
+		Status:            uint32(blk.Status()),
+		Height:            blk.Height(),
+		Timestamp:         grpcutils.TimestampFromTime(blk.Timestamp()),
+		VerifyWithContext: verifyWithCtx,
 	}, nil
 }
 
@@ -419,13 +470,22 @@ func (vm *VMServer) GetBlock(ctx context.Context, req *vmpb.GetBlockRequest) (*v
 		}, errorToRPCError(err)
 	}
 
+	blkWithCtx, verifyWithCtx := blk.(block.WithVerifyContext)
+	if verifyWithCtx {
+		verifyWithCtx, err = blkWithCtx.ShouldVerifyWithContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	parentID := blk.Parent()
 	return &vmpb.GetBlockResponse{
-		ParentId:  parentID[:],
-		Bytes:     blk.Bytes(),
-		Status:    uint32(blk.Status()),
-		Height:    blk.Height(),
-		Timestamp: grpcutils.TimestampFromTime(blk.Timestamp()),
+		ParentId:          parentID[:],
+		Bytes:             blk.Bytes(),
+		Status:            uint32(blk.Status()),
+		Height:            blk.Height(),
+		Timestamp:         grpcutils.TimestampFromTime(blk.Timestamp()),
+		VerifyWithContext: verifyWithCtx,
 	}, nil
 }
 
@@ -764,9 +824,23 @@ func (vm *VMServer) BlockVerify(ctx context.Context, req *vmpb.BlockVerifyReques
 	if err != nil {
 		return nil, err
 	}
-	if err := blk.Verify(ctx); err != nil {
+
+	if req.PChainHeight == nil {
+		err = blk.Verify(ctx)
+	} else {
+		blkWithCtx, ok := blk.(block.WithVerifyContext)
+		if !ok {
+			return nil, fmt.Errorf("%w but got %T", errExpectedBlockWithVerifyContext, blk)
+		}
+		blockCtx := &block.Context{
+			PChainHeight: *req.PChainHeight,
+		}
+		err = blkWithCtx.VerifyWithContext(ctx, blockCtx)
+	}
+	if err != nil {
 		return nil, err
 	}
+
 	return &vmpb.BlockVerifyResponse{
 		Timestamp: grpcutils.TimestampFromTime(blk.Timestamp()),
 	}, nil

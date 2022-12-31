@@ -44,9 +44,9 @@ import (
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/components/chain"
+	"github.com/ava-labs/avalanchego/vms/platformvm/teleporter/gteleporter"
 	"github.com/ava-labs/avalanchego/vms/rpcchainvm/ghttp"
 	"github.com/ava-labs/avalanchego/vms/rpcchainvm/grpcutils"
-	"github.com/ava-labs/avalanchego/vms/rpcchainvm/gsubnetlookup"
 	"github.com/ava-labs/avalanchego/vms/rpcchainvm/messenger"
 
 	aliasreaderpb "github.com/ava-labs/avalanchego/proto/pb/aliasreader"
@@ -56,7 +56,7 @@ import (
 	messengerpb "github.com/ava-labs/avalanchego/proto/pb/messenger"
 	rpcdbpb "github.com/ava-labs/avalanchego/proto/pb/rpcdb"
 	sharedmemorypb "github.com/ava-labs/avalanchego/proto/pb/sharedmemory"
-	subnetlookuppb "github.com/ava-labs/avalanchego/proto/pb/subnetlookup"
+	teleporterpb "github.com/ava-labs/avalanchego/proto/pb/teleporter"
 	validatorstatepb "github.com/ava-labs/avalanchego/proto/pb/validatorstate"
 	vmpb "github.com/ava-labs/avalanchego/proto/pb/vm"
 )
@@ -72,13 +72,15 @@ var (
 	errUnsupportedFXs                       = errors.New("unsupported feature extensions")
 	errBatchedParseBlockWrongNumberOfBlocks = errors.New("BatchedParseBlock returned different number of blocks than expected")
 
-	_ block.ChainVM              = (*VMClient)(nil)
-	_ block.BatchedChainVM       = (*VMClient)(nil)
-	_ block.HeightIndexedChainVM = (*VMClient)(nil)
-	_ block.StateSyncableVM      = (*VMClient)(nil)
-	_ prometheus.Gatherer        = (*VMClient)(nil)
+	_ block.ChainVM                      = (*VMClient)(nil)
+	_ block.BuildBlockWithContextChainVM = (*VMClient)(nil)
+	_ block.BatchedChainVM               = (*VMClient)(nil)
+	_ block.HeightIndexedChainVM         = (*VMClient)(nil)
+	_ block.StateSyncableVM              = (*VMClient)(nil)
+	_ prometheus.Gatherer                = (*VMClient)(nil)
 
-	_ snowman.Block = (*blockClient)(nil)
+	_ snowman.Block           = (*blockClient)(nil)
+	_ block.WithVerifyContext = (*blockClient)(nil)
 
 	_ block.StateSummary = (*summaryClient)(nil)
 )
@@ -91,13 +93,13 @@ type VMClient struct {
 	pid            int
 	processTracker resource.ProcessTracker
 
-	messenger            *messenger.Server
-	keystore             *gkeystore.Server
-	sharedMemory         *gsharedmemory.Server
-	bcLookup             *galiasreader.Server
-	snLookup             *gsubnetlookup.Server
-	appSender            *appsender.Server
-	validatorStateServer *gvalidators.Server
+	messenger              *messenger.Server
+	keystore               *gkeystore.Server
+	sharedMemory           *gsharedmemory.Server
+	bcLookup               *galiasreader.Server
+	appSender              *appsender.Server
+	validatorStateServer   *gvalidators.Server
+	teleporterSignerServer *gteleporter.Server
 
 	serverCloser grpcutils.ServerCloser
 	conns        []*grpc.ClientConn
@@ -183,9 +185,9 @@ func (vm *VMClient) Initialize(
 	vm.keystore = gkeystore.NewServer(chainCtx.Keystore)
 	vm.sharedMemory = gsharedmemory.NewServer(chainCtx.SharedMemory, dbManager.Current().Database)
 	vm.bcLookup = galiasreader.NewServer(chainCtx.BCLookup)
-	vm.snLookup = gsubnetlookup.NewServer(chainCtx.SNLookup)
 	vm.appSender = appsender.NewServer(appSender)
 	vm.validatorStateServer = gvalidators.NewServer(chainCtx.ValidatorState)
+	vm.teleporterSignerServer = gteleporter.NewServer(chainCtx.TeleporterSigner)
 
 	serverListener, err := grpcutils.NewListener()
 	if err != nil {
@@ -204,7 +206,9 @@ func (vm *VMClient) Initialize(
 		ChainId:      chainCtx.ChainID[:],
 		NodeId:       chainCtx.NodeID.Bytes(),
 		XChainId:     chainCtx.XChainID[:],
+		CChainId:     chainCtx.CChainID[:],
 		AvaxAssetId:  chainCtx.AVAXAssetID[:],
+		ChainDataDir: chainCtx.ChainDataDir,
 		GenesisBytes: genesisBytes,
 		UpgradeBytes: upgradeBytes,
 		ConfigBytes:  configBytes,
@@ -229,6 +233,8 @@ func (vm *VMClient) Initialize(
 		return err
 	}
 
+	// We don't need to check whether this is a block.WithVerifyContext because
+	// we'll never Verify this block.
 	lastAcceptedBlk := &blockClient{
 		vm:       vm,
 		id:       id,
@@ -242,14 +248,16 @@ func (vm *VMClient) Initialize(
 	chainState, err := chain.NewMeteredState(
 		registerer,
 		&chain.Config{
-			DecidedCacheSize:    decidedCacheSize,
-			MissingCacheSize:    missingCacheSize,
-			UnverifiedCacheSize: unverifiedCacheSize,
-			BytesToIDCacheSize:  bytesToIDCacheSize,
-			LastAcceptedBlock:   lastAcceptedBlk,
-			GetBlock:            vm.getBlock,
-			UnmarshalBlock:      vm.parseBlock,
-			BuildBlock:          vm.buildBlock,
+			DecidedCacheSize:      decidedCacheSize,
+			MissingCacheSize:      missingCacheSize,
+			UnverifiedCacheSize:   unverifiedCacheSize,
+			BytesToIDCacheSize:    bytesToIDCacheSize,
+			LastAcceptedBlock:     lastAcceptedBlk,
+			GetBlock:              vm.getBlock,
+			UnmarshalBlock:        vm.parseBlock,
+			BatchedUnmarshalBlock: vm.batchedParseBlock,
+			BuildBlock:            vm.buildBlock,
+			BuildBlockWithContext: vm.buildBlockWithContext,
 		},
 	)
 	if err != nil {
@@ -316,10 +324,10 @@ func (vm *VMClient) getInitServer(opts []grpc.ServerOption) *grpc.Server {
 	keystorepb.RegisterKeystoreServer(server, vm.keystore)
 	sharedmemorypb.RegisterSharedMemoryServer(server, vm.sharedMemory)
 	aliasreaderpb.RegisterAliasReaderServer(server, vm.bcLookup)
-	subnetlookuppb.RegisterSubnetLookupServer(server, vm.snLookup)
 	appsenderpb.RegisterAppSenderServer(server, vm.appSender)
 	healthpb.RegisterHealthServer(server, grpcHealth)
 	validatorstatepb.RegisterValidatorStateServer(server, vm.validatorStateServer)
+	teleporterpb.RegisterSignerServer(server, vm.teleporterSignerServer)
 
 	// Ensure metric counters are zeroed on restart
 	grpc_prometheus.Register(server)
@@ -350,6 +358,8 @@ func (vm *VMClient) SetState(ctx context.Context, state snow.State) error {
 		return err
 	}
 
+	// We don't need to check whether this is a block.WithVerifyContext because
+	// we'll never Verify this block.
 	return vm.State.SetLastAcceptedBlock(&blockClient{
 		vm:       vm,
 		id:       id,
@@ -435,32 +445,24 @@ func (vm *VMClient) Disconnected(ctx context.Context, nodeID ids.NodeID) error {
 	return err
 }
 
+// If the underlying VM doesn't actually implement this method, its [BuildBlock]
+// method will be called instead.
+func (vm *VMClient) buildBlockWithContext(ctx context.Context, blockCtx *block.Context) (snowman.Block, error) {
+	resp, err := vm.client.BuildBlock(ctx, &vmpb.BuildBlockRequest{
+		PChainHeight: &blockCtx.PChainHeight,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return vm.newBlockFromBuildBlock(resp)
+}
+
 func (vm *VMClient) buildBlock(ctx context.Context) (snowman.Block, error) {
-	resp, err := vm.client.BuildBlock(ctx, &emptypb.Empty{})
+	resp, err := vm.client.BuildBlock(ctx, &vmpb.BuildBlockRequest{})
 	if err != nil {
 		return nil, err
 	}
-
-	id, err := ids.ToID(resp.Id)
-	if err != nil {
-		return nil, err
-	}
-
-	parentID, err := ids.ToID(resp.ParentId)
-	if err != nil {
-		return nil, err
-	}
-
-	time, err := grpcutils.TimestampAsTime(resp.Timestamp)
-	return &blockClient{
-		vm:       vm,
-		id:       id,
-		parentID: parentID,
-		status:   choices.Processing,
-		bytes:    resp.Bytes,
-		height:   resp.Height,
-		time:     time,
-	}, err
+	return vm.newBlockFromBuildBlock(resp)
 }
 
 func (vm *VMClient) parseBlock(ctx context.Context, bytes []byte) (snowman.Block, error) {
@@ -487,15 +489,19 @@ func (vm *VMClient) parseBlock(ctx context.Context, bytes []byte) (snowman.Block
 	}
 
 	time, err := grpcutils.TimestampAsTime(resp.Timestamp)
+	if err != nil {
+		return nil, err
+	}
 	return &blockClient{
-		vm:       vm,
-		id:       id,
-		parentID: parentID,
-		status:   status,
-		bytes:    bytes,
-		height:   resp.Height,
-		time:     time,
-	}, err
+		vm:                  vm,
+		id:                  id,
+		parentID:            parentID,
+		status:              status,
+		bytes:               bytes,
+		height:              resp.Height,
+		time:                time,
+		shouldVerifyWithCtx: resp.VerifyWithContext,
+	}, nil
 }
 
 func (vm *VMClient) getBlock(ctx context.Context, blkID ids.ID) (snowman.Block, error) {
@@ -521,13 +527,14 @@ func (vm *VMClient) getBlock(ctx context.Context, blkID ids.ID) (snowman.Block, 
 
 	time, err := grpcutils.TimestampAsTime(resp.Timestamp)
 	return &blockClient{
-		vm:       vm,
-		id:       blkID,
-		parentID: parentID,
-		status:   status,
-		bytes:    resp.Bytes,
-		height:   resp.Height,
-		time:     time,
+		vm:                  vm,
+		id:                  blkID,
+		parentID:            parentID,
+		status:              status,
+		bytes:               resp.Bytes,
+		height:              resp.Height,
+		time:                time,
+		shouldVerifyWithCtx: resp.VerifyWithContext,
 	}, err
 }
 
@@ -665,7 +672,7 @@ func (vm *VMClient) GetAncestors(
 	return resp.BlksBytes, nil
 }
 
-func (vm *VMClient) BatchedParseBlock(ctx context.Context, blksBytes [][]byte) ([]snowman.Block, error) {
+func (vm *VMClient) batchedParseBlock(ctx context.Context, blksBytes [][]byte) ([]snowman.Block, error) {
 	resp, err := vm.client.BatchedParseBlock(ctx, &vmpb.BatchedParseBlockRequest{
 		Request: blksBytes,
 	})
@@ -699,13 +706,14 @@ func (vm *VMClient) BatchedParseBlock(ctx context.Context, blksBytes [][]byte) (
 		}
 
 		res = append(res, &blockClient{
-			vm:       vm,
-			id:       id,
-			parentID: parentID,
-			status:   status,
-			bytes:    blksBytes[idx],
-			height:   blkResp.Height,
-			time:     time,
+			vm:                  vm,
+			id:                  id,
+			parentID:            parentID,
+			status:              status,
+			bytes:               blksBytes[idx],
+			height:              blkResp.Height,
+			time:                time,
+			shouldVerifyWithCtx: blkResp.VerifyWithContext,
 		})
 	}
 
@@ -828,15 +836,40 @@ func (vm *VMClient) GetStateSummary(ctx context.Context, summaryHeight uint64) (
 	}, err
 }
 
+func (vm *VMClient) newBlockFromBuildBlock(resp *vmpb.BuildBlockResponse) (*blockClient, error) {
+	id, err := ids.ToID(resp.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	parentID, err := ids.ToID(resp.ParentId)
+	if err != nil {
+		return nil, err
+	}
+
+	time, err := grpcutils.TimestampAsTime(resp.Timestamp)
+	return &blockClient{
+		vm:                  vm,
+		id:                  id,
+		parentID:            parentID,
+		status:              choices.Processing,
+		bytes:               resp.Bytes,
+		height:              resp.Height,
+		time:                time,
+		shouldVerifyWithCtx: resp.VerifyWithContext,
+	}, err
+}
+
 type blockClient struct {
 	vm *VMClient
 
-	id       ids.ID
-	parentID ids.ID
-	status   choices.Status
-	bytes    []byte
-	height   uint64
-	time     time.Time
+	id                  ids.ID
+	parentID            ids.ID
+	status              choices.Status
+	bytes               []byte
+	height              uint64
+	time                time.Time
+	shouldVerifyWithCtx bool
 }
 
 func (b *blockClient) ID() ids.ID {
@@ -889,6 +922,23 @@ func (b *blockClient) Height() uint64 {
 
 func (b *blockClient) Timestamp() time.Time {
 	return b.time
+}
+
+func (b *blockClient) ShouldVerifyWithContext(context.Context) (bool, error) {
+	return b.shouldVerifyWithCtx, nil
+}
+
+func (b *blockClient) VerifyWithContext(ctx context.Context, blockCtx *block.Context) error {
+	resp, err := b.vm.client.BlockVerify(ctx, &vmpb.BlockVerifyRequest{
+		Bytes:        b.bytes,
+		PChainHeight: &blockCtx.PChainHeight,
+	})
+	if err != nil {
+		return err
+	}
+
+	b.time, err = grpcutils.TimestampAsTime(resp.Timestamp)
+	return err
 }
 
 type summaryClient struct {

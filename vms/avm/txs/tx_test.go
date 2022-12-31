@@ -62,6 +62,7 @@ func NewContext(tb testing.TB) *snow.Context {
 	}
 	ctx.AVAXAssetID = avaxAssetID
 	ctx.XChainID = ids.Empty.Prefix(0)
+	ctx.CChainID = ids.Empty.Prefix(1)
 	aliaser := ctx.BCLookup.(ids.Aliaser)
 
 	errs := wrappers.Errs{}
@@ -126,7 +127,7 @@ func TestTxInvalidCredential(t *testing.T) {
 		}},
 		Creds: []*fxs.FxCredential{{Verifiable: &avax.TestVerifiable{Err: errors.New("")}}},
 	}
-	tx.Initialize(nil, nil)
+	tx.SetBytes(nil, nil)
 
 	if err := tx.SyntacticVerify(ctx, c, ids.Empty, 0, 0, 1); err == nil {
 		t.Fatalf("Tx should have failed due to an invalid credential")
@@ -179,7 +180,7 @@ func TestTxInvalidUnsignedTx(t *testing.T) {
 			{Verifiable: &avax.TestVerifiable{}},
 		},
 	}
-	tx.Initialize(nil, nil)
+	tx.SetBytes(nil, nil)
 
 	if err := tx.SyntacticVerify(ctx, c, ids.Empty, 0, 0, 1); err == nil {
 		t.Fatalf("Tx should have failed due to an invalid unsigned tx")
@@ -223,7 +224,7 @@ func TestTxInvalidNumberOfCredentials(t *testing.T) {
 		}},
 		Creds: []*fxs.FxCredential{{Verifiable: &avax.TestVerifiable{}}},
 	}
-	tx.Initialize(nil, nil)
+	tx.SetBytes(nil, nil)
 
 	if err := tx.SyntacticVerify(ctx, c, ids.Empty, 0, 0, 1); err == nil {
 		t.Fatalf("Tx should have failed due to an invalid number of credentials")

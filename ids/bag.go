@@ -6,6 +6,10 @@ package ids
 import (
 	"fmt"
 	"strings"
+
+	"golang.org/x/exp/maps"
+
+	"github.com/ava-labs/avalanchego/utils/set"
 )
 
 const (
@@ -24,7 +28,7 @@ type Bag struct {
 	modeFreq int
 
 	threshold    int
-	metThreshold Set
+	metThreshold set.Set[ID]
 }
 
 func (b *Bag) init() {
@@ -91,13 +95,7 @@ func (b *Bag) Len() int {
 
 // List returns a list of all ids that have been added.
 func (b *Bag) List() []ID {
-	idList := make([]ID, len(b.counts))
-	i := 0
-	for id := range b.counts {
-		idList[i] = id
-		i++
-	}
-	return idList
+	return maps.Keys(b.counts)
 }
 
 // Equals returns true if the bags contain the same elements
@@ -121,7 +119,7 @@ func (b *Bag) Mode() (ID, int) {
 }
 
 // Threshold returns the ids that have been seen at least threshold times.
-func (b *Bag) Threshold() Set {
+func (b *Bag) Threshold() set.Set[ID] {
 	return b.metThreshold
 }
 

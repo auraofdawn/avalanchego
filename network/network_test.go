@@ -18,6 +18,7 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/message"
 	"github.com/ava-labs/avalanchego/network/dialer"
+	"github.com/ava-labs/avalanchego/network/peer"
 	"github.com/ava-labs/avalanchego/network/throttling"
 	"github.com/ava-labs/avalanchego/snow/networking/router"
 	"github.com/ava-labs/avalanchego/snow/networking/tracker"
@@ -28,6 +29,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/math/meter"
 	"github.com/ava-labs/avalanchego/utils/resource"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/version"
 )
@@ -194,18 +196,6 @@ func newFullyConnectedTestNetwork(t *testing.T, handlers []router.InboundHandler
 
 	dialer, listeners, nodeIDs, configs := newTestNetwork(t, len(handlers))
 
-	beacons := validators.NewSet()
-	err := beacons.AddWeight(nodeIDs[0], 1)
-	require.NoError(err)
-
-	vdrs := validators.NewManager()
-	for _, nodeID := range nodeIDs {
-		err := vdrs.AddWeight(constants.PrimaryNetworkID, nodeID, 1)
-		require.NoError(err)
-	}
-
-	msgCreator := newMessageCreator(t)
-
 	var (
 		networks = make([]Network, len(configs))
 
@@ -215,17 +205,44 @@ func newFullyConnectedTestNetwork(t *testing.T, handlers []router.InboundHandler
 		onAllConnected = make(chan struct{})
 	)
 	for i, config := range configs {
+		msgCreator := newMessageCreator(t)
+		registry := prometheus.NewRegistry()
+
+		g, err := peer.NewGossipTracker(registry, "foobar")
+		require.NoError(err)
+
+		log := logging.NoLog{}
+		gossipTrackerCallback := peer.GossipTrackerCallback{
+			Log:           log,
+			GossipTracker: g,
+		}
+
+		beacons := validators.NewSet()
+		err = beacons.Add(nodeIDs[0], nil, ids.GenerateTestID(), 1)
+		require.NoError(err)
+
+		primaryVdrs := validators.NewSet()
+		primaryVdrs.RegisterCallbackListener(&gossipTrackerCallback)
+		for _, nodeID := range nodeIDs {
+			err := primaryVdrs.Add(nodeID, nil, ids.GenerateTestID(), 1)
+			require.NoError(err)
+		}
+
+		vdrs := validators.NewManager()
+		_ = vdrs.Add(constants.PrimaryNetworkID, primaryVdrs)
+
 		config := config
 
+		config.GossipTracker = g
 		config.Beacons = beacons
 		config.Validators = vdrs
 
-		var connected ids.NodeIDSet
+		var connected set.Set[ids.NodeID]
 		net, err := NewNetwork(
 			config,
 			msgCreator,
-			prometheus.NewRegistry(),
-			logging.NoLog{},
+			registry,
+			log,
 			listeners[i],
 			dialer,
 			&testHandler{
@@ -317,7 +334,7 @@ func TestSend(t *testing.T) {
 	outboundGetMsg, err := mc.Get(ids.Empty, 1, time.Second, ids.Empty)
 	require.NoError(err)
 
-	toSend := ids.NodeIDSet{}
+	toSend := set.Set[ids.NodeID]{}
 	toSend.Add(nodeIDs[1])
 	sentTo := net0.Send(outboundGetMsg, toSend, constants.PrimaryNetworkID, false)
 	require.EqualValues(toSend, sentTo)
@@ -338,10 +355,10 @@ func TestTrackVerifiesSignatures(t *testing.T) {
 
 	network := networks[0].(*network)
 	nodeID, tlsCert, _ := getTLS(t, 1)
-	err := network.config.Validators.AddWeight(constants.PrimaryNetworkID, nodeID, 1)
+	err := validators.Add(network.config.Validators, constants.PrimaryNetworkID, nodeID, nil, ids.Empty, 1)
 	require.NoError(err)
 
-	useful := network.Track(ips.ClaimedIPPort{
+	_, err = network.Track(ids.EmptyNodeID, []*ips.ClaimedIPPort{{
 		Cert: tlsCert.Leaf,
 		IPPort: ips.IPPort{
 			IP:   net.IPv4(123, 132, 123, 123),
@@ -349,9 +366,9 @@ func TestTrackVerifiesSignatures(t *testing.T) {
 		},
 		Timestamp: 1000,
 		Signature: nil,
-	})
+	}})
 	// The signature is wrong so this peer tracking info isn't useful.
-	require.False(useful)
+	require.Error(err)
 
 	network.peersLock.RLock()
 	require.Empty(network.trackedIPs)

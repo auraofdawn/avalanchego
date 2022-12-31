@@ -153,7 +153,7 @@ func (b *preForkBlock) verifyPostForkChild(ctx context.Context, child *postForkB
 	}
 
 	// Verify the inner block and track it as verified
-	return b.vm.verifyAndRecordInnerBlk(ctx, child)
+	return b.vm.verifyAndRecordInnerBlk(ctx, nil, child)
 }
 
 func (*preForkBlock) verifyPostForkOption(context.Context, *postForkOption) error {

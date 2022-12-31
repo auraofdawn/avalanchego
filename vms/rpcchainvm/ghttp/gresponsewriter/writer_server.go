@@ -8,6 +8,8 @@ import (
 	"errors"
 	"net/http"
 
+	"golang.org/x/exp/maps"
+
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -47,9 +49,7 @@ func (s *Server) Write(
 	req *responsewriterpb.WriteRequest,
 ) (*responsewriterpb.WriteResponse, error) {
 	headers := s.writer.Header()
-	for key := range headers {
-		delete(headers, key)
-	}
+	maps.Clear(headers)
 	for _, header := range req.Headers {
 		headers[header.Key] = header.Values
 	}
@@ -68,9 +68,7 @@ func (s *Server) WriteHeader(
 	req *responsewriterpb.WriteHeaderRequest,
 ) (*emptypb.Empty, error) {
 	headers := s.writer.Header()
-	for key := range headers {
-		delete(headers, key)
-	}
+	maps.Clear(headers)
 	for _, header := range req.Headers {
 		headers[header.Key] = header.Values
 	}
@@ -105,10 +103,7 @@ func (s *Server) Hijack(context.Context, *emptypb.Empty) (*responsewriterpb.Hija
 
 	closer := grpcutils.ServerCloser{}
 	go grpcutils.Serve(serverListener, func(opts []grpc.ServerOption) *grpc.Server {
-		if len(opts) == 0 {
-			opts = append(opts, grpcutils.DefaultServerOptions...)
-		}
-		server := grpc.NewServer(opts...)
+		server := grpcutils.NewDefaultServer(opts)
 		closer.Add(server)
 		connpb.RegisterConnServer(server, gconn.NewServer(conn, &closer))
 		readerpb.RegisterReaderServer(server, greader.NewServer(readWriter))

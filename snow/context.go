@@ -16,13 +16,9 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils"
-	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/utils/logging"
+	"github.com/ava-labs/avalanchego/vms/platformvm/teleporter"
 )
-
-type SubnetLookup interface {
-	SubnetID(chainID ids.ID) (ids.ID, error)
-}
 
 // ContextInitializable represents an object that can be initialized
 // given a *Context object
@@ -42,6 +38,7 @@ type Context struct {
 	NodeID    ids.NodeID
 
 	XChainID    ids.ID
+	CChainID    ids.ID
 	AVAXAssetID ids.ID
 
 	Log          logging.Logger
@@ -49,14 +46,17 @@ type Context struct {
 	Keystore     keystore.BlockchainKeystore
 	SharedMemory atomic.SharedMemory
 	BCLookup     ids.AliaserReader
-	SNLookup     SubnetLookup
 	Metrics      metrics.OptionalGatherer
+
+	TeleporterSigner teleporter.Signer
 
 	// snowman++ attributes
 	ValidatorState    validators.State  // interface for P-Chain validators
 	StakingLeafSigner crypto.Signer     // block signer
 	StakingCertLeaf   *x509.Certificate // block certificate
-	StakingBLSKey     *bls.SecretKey    // bls signer
+
+	// Chain-specific directory where arbitrary data can be written
+	ChainDataDir string
 }
 
 // Expose gatherer interface for unit testing.
@@ -122,13 +122,14 @@ func (ctx *ConsensusContext) SetValidatorOnly() {
 
 func DefaultContextTest() *Context {
 	return &Context{
-		NetworkID: 0,
-		SubnetID:  ids.Empty,
-		ChainID:   ids.Empty,
-		NodeID:    ids.EmptyNodeID,
-		Log:       logging.NoLog{},
-		BCLookup:  ids.NewAliaser(),
-		Metrics:   metrics.NewOptionalGatherer(),
+		NetworkID:    0,
+		SubnetID:     ids.Empty,
+		ChainID:      ids.Empty,
+		NodeID:       ids.EmptyNodeID,
+		Log:          logging.NoLog{},
+		BCLookup:     ids.NewAliaser(),
+		Metrics:      metrics.NewOptionalGatherer(),
+		ChainDataDir: "",
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman/poll"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
 	"github.com/ava-labs/avalanchego/snow/events"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/avalanchego/version"
 )
@@ -586,12 +587,13 @@ func (t *Transitive) issueWithAncestors(ctx context.Context, blk snowman.Block) 
 	// issue [blk] and its ancestors into consensus
 	status := blk.Status()
 	for status.Fetched() && !t.wasIssued(blk) {
-		if err := t.issue(ctx, blk); err != nil {
+		err := t.issue(ctx, blk)
+		if err != nil {
 			return false, err
 		}
 		blkID = blk.Parent()
-		var err error
-		if blk, err = t.GetBlock(ctx, blkID); err != nil {
+		blk, err = t.GetBlock(ctx, blkID)
+		if err != nil {
 			status = choices.Unknown
 			break
 		}
@@ -685,7 +687,7 @@ func (t *Transitive) pullQuery(ctx context.Context, blkID ids.ID) {
 		zap.Stringer("validators", t.Validators),
 	)
 	// The validators we will query
-	vdrs, err := t.Validators.Sample(t.Params.K)
+	vdrIDs, err := t.Validators.Sample(t.Params.K)
 	if err != nil {
 		t.Ctx.Log.Error("dropped query for block",
 			zap.String("reason", "insufficient number of validators"),
@@ -695,14 +697,12 @@ func (t *Transitive) pullQuery(ctx context.Context, blkID ids.ID) {
 	}
 
 	vdrBag := ids.NodeIDBag{}
-	for _, vdr := range vdrs {
-		vdrBag.Add(vdr.ID())
-	}
+	vdrBag.Add(vdrIDs...)
 
 	t.RequestID++
 	if t.polls.Add(t.RequestID, vdrBag) {
 		vdrList := vdrBag.List()
-		vdrSet := ids.NewNodeIDSet(len(vdrList))
+		vdrSet := set.NewSet[ids.NodeID](len(vdrList))
 		vdrSet.Add(vdrList...)
 		t.Sender.SendPullQuery(ctx, vdrSet, t.RequestID, blkID)
 	}
@@ -716,7 +716,7 @@ func (t *Transitive) sendMixedQuery(ctx context.Context, blk snowman.Block) {
 	)
 
 	blkID := blk.ID()
-	vdrs, err := t.Validators.Sample(t.Params.K)
+	vdrIDs, err := t.Validators.Sample(t.Params.K)
 	if err != nil {
 		t.Ctx.Log.Error("dropped query for block",
 			zap.String("reason", "insufficient number of validators"),
@@ -726,9 +726,7 @@ func (t *Transitive) sendMixedQuery(ctx context.Context, blk snowman.Block) {
 	}
 
 	vdrBag := ids.NodeIDBag{}
-	for _, vdr := range vdrs {
-		vdrBag.Add(vdr.ID())
-	}
+	vdrBag.Add(vdrIDs...)
 
 	t.RequestID++
 	if t.polls.Add(t.RequestID, vdrBag) {

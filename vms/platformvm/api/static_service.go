@@ -4,13 +4,12 @@
 package api
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/formatting"
 	"github.com/ava-labs/avalanchego/utils/formatting/address"
 	"github.com/ava-labs/avalanchego/utils/json"
@@ -35,6 +34,8 @@ var (
 	errUTXOHasNoValue       = errors.New("genesis UTXO has no value")
 	errValidatorAddsNoValue = errors.New("validator would have already unstaked")
 	errStakeOverflow        = errors.New("validator stake exceeds limit")
+
+	_ utils.Sortable[UTXO] = UTXO{}
 )
 
 // StaticService defines the static API methods exposed by the platform VM
@@ -48,6 +49,33 @@ type UTXO struct {
 	Message  string      `json:"message"`
 }
 
+// TODO can we define this on *UTXO?
+func (utxo UTXO) Less(other UTXO) bool {
+	if utxo.Locktime < other.Locktime {
+		return true
+	} else if utxo.Locktime > other.Locktime {
+		return false
+	}
+
+	if utxo.Amount < other.Amount {
+		return true
+	} else if utxo.Amount > other.Amount {
+		return false
+	}
+
+	utxoAddr, err := bech32ToID(utxo.Address)
+	if err != nil {
+		return false
+	}
+
+	otherAddr, err := bech32ToID(other.Address)
+	if err != nil {
+		return false
+	}
+
+	return utxoAddr.Less(otherAddr)
+}
+
 // TODO: Refactor APIStaker, APIValidators and merge them together for
 //       PermissionedValidators + PermissionlessValidators.
 
@@ -57,6 +85,7 @@ type UTXO struct {
 // [StartTime] is the Unix time when they start staking
 // [Endtime] is the Unix time repr. of when they are done staking
 // [NodeID] is the node ID of the staker
+// [Uptime] is the observed uptime of this staker
 type Staker struct {
 	TxID        ids.ID       `json:"txID"`
 	StartTime   json.Uint64  `json:"startTime"`
@@ -100,7 +129,8 @@ type PermissionlessValidator struct {
 type PermissionedValidator struct {
 	Staker
 	// The owner the staking reward, if applicable, will go to
-	Connected bool `json:"connected"`
+	Connected bool          `json:"connected"`
+	Uptime    *json.Float32 `json:"uptime,omitempty"`
 }
 
 // PrimaryDelegator is the repr. of a primary network delegator sent over APIs.
@@ -219,7 +249,7 @@ func (*StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, repl
 	for _, vdr := range args.Validators {
 		weight := uint64(0)
 		stake := make([]*avax.TransferableOutput, len(vdr.Staked))
-		sortUTXOs(vdr.Staked)
+		utils.Sort(vdr.Staked)
 		for i, apiUTXO := range vdr.Staked {
 			addrID, err := bech32ToID(apiUTXO.Address)
 			if err != nil {
@@ -270,7 +300,7 @@ func (*StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, repl
 			}
 			owner.Addrs = append(owner.Addrs, addrID)
 		}
-		ids.SortShortIDs(owner.Addrs)
+		utils.Sort(owner.Addrs)
 
 		delegationFee := uint32(0)
 		if vdr.ExactDelegationFee != nil {
@@ -292,7 +322,7 @@ func (*StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, repl
 			RewardsOwner:     owner,
 			DelegationShares: delegationFee,
 		}}
-		if err := tx.Sign(txs.GenesisCodec, nil); err != nil {
+		if err := tx.Initialize(txs.GenesisCodec); err != nil {
 			return err
 		}
 
@@ -318,7 +348,7 @@ func (*StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, repl
 			GenesisData: genesisBytes,
 			SubnetAuth:  &secp256k1fx.Input{},
 		}}
-		if err := tx.Sign(txs.GenesisCodec, nil); err != nil {
+		if err := tx.Initialize(txs.GenesisCodec); err != nil {
 			return err
 		}
 
@@ -348,44 +378,4 @@ func (*StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, repl
 	}
 	reply.Encoding = args.Encoding
 	return nil
-}
-
-type innerSortUTXO []UTXO
-
-func (s innerSortUTXO) Less(i, j int) bool {
-	if s[i].Locktime < s[j].Locktime {
-		return true
-	} else if s[i].Locktime > s[j].Locktime {
-		return false
-	}
-
-	if s[i].Amount < s[j].Amount {
-		return true
-	} else if s[i].Amount > s[j].Amount {
-		return false
-	}
-
-	iAddrID, err := bech32ToID(s[i].Address)
-	if err != nil {
-		return false
-	}
-
-	jAddrID, err := bech32ToID(s[j].Address)
-	if err != nil {
-		return false
-	}
-
-	return bytes.Compare(iAddrID.Bytes(), jAddrID.Bytes()) == -1
-}
-
-func (s innerSortUTXO) Len() int {
-	return len(s)
-}
-
-func (s innerSortUTXO) Swap(i, j int) {
-	s[j], s[i] = s[i], s[j]
-}
-
-func sortUTXOs(utxos []UTXO) {
-	sort.Sort(innerSortUTXO(utxos))
 }

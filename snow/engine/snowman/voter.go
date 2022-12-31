@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/set"
 )
 
 // Voter records chits received from [vdr] once its dependencies are met.
@@ -17,10 +18,10 @@ type voter struct {
 	vdr       ids.NodeID
 	requestID uint32
 	response  ids.ID
-	deps      ids.Set
+	deps      set.Set[ids.ID]
 }
 
-func (v *voter) Dependencies() ids.Set {
+func (v *voter) Dependencies() set.Set[ids.ID] {
 	return v.deps
 }
 
@@ -51,15 +52,15 @@ func (v *voter) Update(ctx context.Context) {
 		return
 	}
 
-	// To prevent any potential deadlocks with un-disclosed dependencies, votes
-	// must be bubbled to the nearest valid block
-	for i, result := range results {
-		results[i] = v.bubbleVotes(ctx, result)
-	}
-
 	for _, result := range results {
 		result := result
+		v.t.Ctx.Log.Debug("filtering poll results",
+			zap.Stringer("result", &result),
+		)
 
+		// To prevent any potential deadlocks with un-disclosed dependencies,
+		// votes must be bubbled to the nearest valid block
+		result = v.bubbleVotes(ctx, result)
 		v.t.Ctx.Log.Debug("finishing poll",
 			zap.Stringer("result", &result),
 		)

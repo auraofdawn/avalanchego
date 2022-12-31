@@ -30,7 +30,6 @@ import (
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/proposervm/proposer"
 	"github.com/ava-labs/avalanchego/vms/proposervm/state"
-	"github.com/ava-labs/avalanchego/vms/proposervm/tree"
 
 	statelessblock "github.com/ava-labs/avalanchego/vms/proposervm/block"
 )
@@ -141,13 +140,25 @@ func initTestProposerVM(
 	valState.GetCurrentHeightF = func(context.Context) (uint64, error) {
 		return defaultPChainHeight, nil
 	}
-	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]uint64, error) {
-		res := make(map[ids.NodeID]uint64)
-		res[proVM.ctx.NodeID] = uint64(10)
-		res[ids.NodeID{1}] = uint64(5)
-		res[ids.NodeID{2}] = uint64(6)
-		res[ids.NodeID{3}] = uint64(7)
-		return res, nil
+	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
+		return map[ids.NodeID]*validators.GetValidatorOutput{
+			proVM.ctx.NodeID: {
+				NodeID: proVM.ctx.NodeID,
+				Weight: 10,
+			},
+			{1}: {
+				NodeID: ids.NodeID{1},
+				Weight: 5,
+			},
+			{2}: {
+				NodeID: ids.NodeID{2},
+				Weight: 6,
+			},
+			{3}: {
+				NodeID: ids.NodeID{3},
+				Weight: 7,
+			},
+		}, nil
 	}
 
 	ctx := snow.DefaultContextTest()
@@ -641,7 +652,7 @@ func TestTwoProBlocksWithSameParentCanBothVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal("Could not build block")
 	}
-	if err = builtBlk.Verify(context.Background()); err != nil {
+	if err := builtBlk.Verify(context.Background()); err != nil {
 		t.Fatal("Built block does not verify")
 	}
 
@@ -690,7 +701,7 @@ func TestTwoProBlocksWithSameParentCanBothVerify(t *testing.T) {
 	}
 
 	// prove that also block from network verifies
-	if err = netProBlk.Verify(context.Background()); err != nil {
+	if err := netProBlk.Verify(context.Background()); err != nil {
 		t.Fatal("block from network does not verify")
 	}
 }
@@ -852,7 +863,7 @@ func TestPreFork_SetPreference(t *testing.T) {
 			return nil, errUnknownBlock
 		}
 	}
-	if err = proVM.SetPreference(context.Background(), builtBlk.ID()); err != nil {
+	if err := proVM.SetPreference(context.Background(), builtBlk.ID()); err != nil {
 		t.Fatal("Could not set preference on proposer Block")
 	}
 
@@ -923,9 +934,12 @@ func TestExpiredBuildBlock(t *testing.T) {
 	valState.GetCurrentHeightF = func(context.Context) (uint64, error) {
 		return defaultPChainHeight, nil
 	}
-	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]uint64, error) {
-		return map[ids.NodeID]uint64{
-			{1}: 100,
+	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
+		return map[ids.NodeID]*validators.GetValidatorOutput{
+			{1}: {
+				NodeID: ids.NodeID{1},
+				Weight: 100,
+			},
 		}, nil
 	}
 
@@ -1212,9 +1226,12 @@ func TestInnerVMRollback(t *testing.T) {
 	valState.GetCurrentHeightF = func(context.Context) (uint64, error) {
 		return defaultPChainHeight, nil
 	}
-	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]uint64, error) {
-		return map[ids.NodeID]uint64{
-			{1}: 100,
+	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
+		return map[ids.NodeID]*validators.GetValidatorOutput{
+			{1}: {
+				NodeID: ids.NodeID{1},
+				Weight: 100,
+			},
 		}, nil
 	}
 
@@ -1404,9 +1421,12 @@ func TestInnerVMRollback(t *testing.T) {
 func TestBuildBlockDuringWindow(t *testing.T) {
 	coreVM, valState, proVM, coreGenBlk, _ := initTestProposerVM(t, time.Time{}, 0) // enable ProBlks
 
-	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]uint64, error) {
-		return map[ids.NodeID]uint64{
-			proVM.ctx.NodeID: 10,
+	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
+		return map[ids.NodeID]*validators.GetValidatorOutput{
+			proVM.ctx.NodeID: {
+				NodeID: proVM.ctx.NodeID,
+				Weight: 10,
+			},
 		}, nil
 	}
 
@@ -1688,7 +1708,7 @@ func TestTooFarAdvanced(t *testing.T) {
 		},
 	}
 
-	if err = bBlock.Verify(context.Background()); err != errProposerWindowNotStarted {
+	if err := bBlock.Verify(context.Background()); err != errProposerWindowNotStarted {
 		t.Fatal("should have errored errProposerWindowNotStarted")
 	}
 
@@ -1712,7 +1732,7 @@ func TestTooFarAdvanced(t *testing.T) {
 		},
 	}
 
-	if err = bBlock.Verify(context.Background()); err != errTimeTooAdvanced {
+	if err := bBlock.Verify(context.Background()); err != errTimeTooAdvanced {
 		t.Fatal("should have errored errTimeTooAdvanced")
 	}
 }
@@ -1927,13 +1947,25 @@ func TestRejectedHeightNotIndexed(t *testing.T) {
 	valState.GetCurrentHeightF = func(context.Context) (uint64, error) {
 		return defaultPChainHeight, nil
 	}
-	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]uint64, error) {
-		res := make(map[ids.NodeID]uint64)
-		res[proVM.ctx.NodeID] = uint64(10)
-		res[ids.NodeID{1}] = uint64(5)
-		res[ids.NodeID{2}] = uint64(6)
-		res[ids.NodeID{3}] = uint64(7)
-		return res, nil
+	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
+		return map[ids.NodeID]*validators.GetValidatorOutput{
+			proVM.ctx.NodeID: {
+				NodeID: proVM.ctx.NodeID,
+				Weight: 10,
+			},
+			{1}: {
+				NodeID: ids.NodeID{1},
+				Weight: 5,
+			},
+			{2}: {
+				NodeID: ids.NodeID{2},
+				Weight: 6,
+			},
+			{3}: {
+				NodeID: ids.NodeID{3},
+				Weight: 7,
+			},
+		}, nil
 	}
 
 	ctx := snow.DefaultContextTest()
@@ -2125,13 +2157,25 @@ func TestRejectedOptionHeightNotIndexed(t *testing.T) {
 	valState.GetCurrentHeightF = func(context.Context) (uint64, error) {
 		return defaultPChainHeight, nil
 	}
-	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]uint64, error) {
-		res := make(map[ids.NodeID]uint64)
-		res[proVM.ctx.NodeID] = uint64(10)
-		res[ids.NodeID{1}] = uint64(5)
-		res[ids.NodeID{2}] = uint64(6)
-		res[ids.NodeID{3}] = uint64(7)
-		return res, nil
+	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
+		return map[ids.NodeID]*validators.GetValidatorOutput{
+			proVM.ctx.NodeID: {
+				NodeID: proVM.ctx.NodeID,
+				Weight: 10,
+			},
+			{1}: {
+				NodeID: ids.NodeID{1},
+				Weight: 5,
+			},
+			{2}: {
+				NodeID: ids.NodeID{2},
+				Weight: 6,
+			},
+			{3}: {
+				NodeID: ids.NodeID{3},
+				Weight: 7,
+			},
+		}, nil
 	}
 
 	ctx := snow.DefaultContextTest()
@@ -2308,9 +2352,8 @@ func TestVMInnerBlkCache(t *testing.T) {
 
 	// Create a block near the tip (0).
 	blkNearTipInnerBytes := []byte{1}
-	parentID := ids.GenerateTestID()
 	blkNearTip, err := statelessblock.Build(
-		parentID,                 // parent
+		ids.GenerateTestID(),     // parent
 		time.Time{},              // timestamp
 		1,                        // pChainHeight,
 		vm.ctx.StakingCertLeaf,   // cert
@@ -2335,7 +2378,7 @@ func TestVMInnerBlkCache(t *testing.T) {
 	gotBlk, ok := vm.innerBlkCache.Get(blkNearTip.ID())
 	require.True(ok)
 	require.Equal(mockInnerBlkNearTip, gotBlk)
-	require.Equal(uint64(0), vm.lastAcceptedHeight)
+	require.EqualValues(0, vm.lastAcceptedHeight)
 
 	// Clear the cache
 	vm.innerBlkCache.Flush()
@@ -2350,31 +2393,232 @@ func TestVMInnerBlkCache(t *testing.T) {
 
 	_, ok = vm.innerBlkCache.Get(blkNearTip.ID())
 	require.False(ok)
+}
 
-	// Reset the tip height
-	vm.lastAcceptedHeight = 0
+func TestVMInnerBlkCacheDeduplicationRegression(t *testing.T) {
+	require := require.New(t)
+	forkTime := time.Unix(0, 0)
+	coreVM, _, proVM, gBlock, _ := initTestProposerVM(t, forkTime, 0)
 
-	// Test that when the block is verified, the reference in the cache
-	// to the inner block is the same reference that the engine has.
-	mockTree := tree.NewMockTree(ctrl)
-	newInnerBlock := snowman.NewMockBlock(ctrl)
-	// Tree says it doesn't contain [blkNearTip]
-	mockTree.EXPECT().Get(newInnerBlock).Return(nil, false)
-	// We should add it.
-	mockTree.EXPECT().Add(newInnerBlock)
-	vm.Tree = mockTree
+	// create pre-fork block X and post-fork block A
+	xBlock := &snowman.TestBlock{
+		TestDecidable: choices.TestDecidable{
+			IDV:     ids.GenerateTestID(),
+			StatusV: choices.Processing,
+		},
+		BytesV:     []byte{1},
+		ParentV:    gBlock.ID(),
+		HeightV:    gBlock.Height() + 1,
+		TimestampV: gBlock.Timestamp(),
+	}
 
-	blk := NewMockPostForkBlock(ctrl)
-	blk.EXPECT().ID().Return(blkNearTip.ID())
-	blk.EXPECT().getInnerBlk().Return(newInnerBlock)
-	newInnerBlock.EXPECT().Verify(gomock.Any()).Return(nil)
+	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
+		return xBlock, nil
+	}
+	aBlock, err := proVM.BuildBlock(context.Background())
+	require.NoError(err)
+	coreVM.BuildBlockF = nil
 
-	// When we verify [blk] we see that the inner block isn't in the tree
-	// (hasn't been verified) so we verify it and put it in the cahce.
-	err = vm.verifyAndRecordInnerBlk(context.Background(), blk)
+	bStatelessBlock, err := statelessblock.BuildUnsigned(
+		gBlock.ID(),
+		gBlock.Timestamp(),
+		defaultPChainHeight,
+		xBlock.Bytes(),
+	)
 	require.NoError(err)
 
-	gotBlk, ok = vm.innerBlkCache.Get(blkNearTip.ID())
+	xBlockCopy := &snowman.TestBlock{
+		TestDecidable: choices.TestDecidable{
+			IDV:     xBlock.IDV,
+			StatusV: choices.Processing,
+		},
+		BytesV:     []byte{1},
+		ParentV:    gBlock.ID(),
+		HeightV:    gBlock.Height() + 1,
+		TimestampV: gBlock.Timestamp(),
+	}
+	coreVM.ParseBlockF = func(context.Context, []byte) (snowman.Block, error) {
+		return xBlockCopy, nil
+	}
+
+	bBlockBytes := bStatelessBlock.Bytes()
+	bBlock, err := proVM.ParseBlock(context.Background(), bBlockBytes)
+	require.NoError(err)
+
+	err = aBlock.Verify(context.Background())
+	require.NoError(err)
+
+	err = bBlock.Verify(context.Background())
+	require.NoError(err)
+
+	err = aBlock.Accept(context.Background())
+	require.NoError(err)
+
+	err = bBlock.Reject(context.Background())
+	require.NoError(err)
+
+	require.Equal(
+		choices.Accepted,
+		aBlock.(*postForkBlock).innerBlk.Status(),
+	)
+
+	require.Equal(
+		choices.Accepted,
+		bBlock.(*postForkBlock).innerBlk.Status(),
+	)
+
+	xBlockIntf, ok := proVM.innerBlkCache.Get(bBlock.ID())
 	require.True(ok)
-	require.Equal(newInnerBlock, gotBlk)
+	cachedXBlock := xBlockIntf.(snowman.Block)
+	require.Equal(
+		choices.Accepted,
+		cachedXBlock.Status(),
+	)
+}
+
+type blockWithVerifyContext struct {
+	*snowman.MockBlock
+	*mocks.MockWithVerifyContext
+}
+
+// Ensures that we call [VerifyWithContext] rather than [Verify] on blocks that
+// implement [block.WithVerifyContext] and that returns true for
+// [ShouldVerifyWithContext].
+func TestVM_VerifyBlockWithContext(t *testing.T) {
+	require := require.New(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Create a VM
+	innerVM := mocks.NewMockChainVM(ctrl)
+	vm := New(
+		innerVM,
+		time.Time{}, // fork is active
+		0,           // minimum P-Chain height
+		DefaultMinBlockDelay,
+	)
+
+	dummyDBManager := manager.NewMemDB(version.Semantic1_0_0)
+	// make sure that DBs are compressed correctly
+	dummyDBManager = dummyDBManager.NewPrefixDBManager([]byte{})
+
+	innerVM.EXPECT().Initialize(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(nil)
+
+	snowCtx := snow.DefaultContextTest()
+	snowCtx.NodeID = ids.NodeIDFromCert(pTestCert.Leaf)
+	snowCtx.StakingCertLeaf = pTestCert.Leaf
+	snowCtx.StakingLeafSigner = pTestCert.PrivateKey.(crypto.Signer)
+
+	err := vm.Initialize(
+		context.Background(),
+		snowCtx,
+		dummyDBManager,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	require.NoError(err)
+
+	{
+		pChainHeight := uint64(0)
+		innerBlk := blockWithVerifyContext{
+			MockBlock:             snowman.NewMockBlock(ctrl),
+			MockWithVerifyContext: mocks.NewMockWithVerifyContext(ctrl),
+		}
+		innerBlk.MockWithVerifyContext.EXPECT().ShouldVerifyWithContext(gomock.Any()).Return(true, nil).Times(2)
+		innerBlk.MockWithVerifyContext.EXPECT().VerifyWithContext(context.Background(),
+			&block.Context{
+				PChainHeight: pChainHeight,
+			},
+		).Return(nil)
+		innerBlk.MockBlock.EXPECT().Parent().Return(ids.GenerateTestID()).AnyTimes()
+		innerBlk.MockBlock.EXPECT().ID().Return(ids.GenerateTestID()).AnyTimes()
+
+		blk := NewMockPostForkBlock(ctrl)
+		blk.EXPECT().getInnerBlk().Return(innerBlk).AnyTimes()
+		blkID := ids.GenerateTestID()
+		blk.EXPECT().ID().Return(blkID).AnyTimes()
+
+		err = vm.verifyAndRecordInnerBlk(
+			context.Background(),
+			&block.Context{
+				PChainHeight: pChainHeight,
+			},
+			blk,
+		)
+		require.NoError(err)
+
+		// Call VerifyWithContext again but with a different P-Chain height
+		blk.EXPECT().setInnerBlk(innerBlk).AnyTimes()
+		pChainHeight++
+		innerBlk.MockWithVerifyContext.EXPECT().VerifyWithContext(context.Background(),
+			&block.Context{
+				PChainHeight: pChainHeight,
+			},
+		).Return(nil)
+
+		err = vm.verifyAndRecordInnerBlk(
+			context.Background(),
+			&block.Context{
+				PChainHeight: pChainHeight,
+			},
+			blk,
+		)
+		require.NoError(err)
+	}
+
+	{
+		// Ensure we call Verify on a block that returns
+		// false for ShouldVerifyWithContext
+		innerBlk := blockWithVerifyContext{
+			MockBlock:             snowman.NewMockBlock(ctrl),
+			MockWithVerifyContext: mocks.NewMockWithVerifyContext(ctrl),
+		}
+		innerBlk.MockWithVerifyContext.EXPECT().ShouldVerifyWithContext(gomock.Any()).Return(false, nil)
+		innerBlk.MockBlock.EXPECT().Verify(gomock.Any()).Return(nil)
+		innerBlk.MockBlock.EXPECT().Parent().Return(ids.GenerateTestID()).AnyTimes()
+		innerBlk.MockBlock.EXPECT().ID().Return(ids.GenerateTestID()).AnyTimes()
+		blk := NewMockPostForkBlock(ctrl)
+		blk.EXPECT().getInnerBlk().Return(innerBlk).AnyTimes()
+		blkID := ids.GenerateTestID()
+		blk.EXPECT().ID().Return(blkID).AnyTimes()
+		err = vm.verifyAndRecordInnerBlk(
+			context.Background(),
+			&block.Context{
+				PChainHeight: 1,
+			},
+			blk,
+		)
+		require.NoError(err)
+	}
+
+	{
+		// Ensure we call Verify on a block that doesn't have a valid context
+		innerBlk := blockWithVerifyContext{
+			MockBlock:             snowman.NewMockBlock(ctrl),
+			MockWithVerifyContext: mocks.NewMockWithVerifyContext(ctrl),
+		}
+		innerBlk.MockBlock.EXPECT().Verify(gomock.Any()).Return(nil)
+		innerBlk.MockBlock.EXPECT().Parent().Return(ids.GenerateTestID()).AnyTimes()
+		innerBlk.MockBlock.EXPECT().ID().Return(ids.GenerateTestID()).AnyTimes()
+		blk := NewMockPostForkBlock(ctrl)
+		blk.EXPECT().getInnerBlk().Return(innerBlk).AnyTimes()
+		blkID := ids.GenerateTestID()
+		blk.EXPECT().ID().Return(blkID).AnyTimes()
+		err = vm.verifyAndRecordInnerBlk(context.Background(), nil, blk)
+		require.NoError(err)
+	}
 }

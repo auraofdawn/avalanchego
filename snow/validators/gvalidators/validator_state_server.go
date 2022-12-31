@@ -10,6 +10,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 
 	pb "github.com/ava-labs/avalanchego/proto/pb/validatorstate"
 )
@@ -35,6 +36,18 @@ func (s *Server) GetCurrentHeight(ctx context.Context, _ *emptypb.Empty) (*pb.Ge
 	return &pb.GetCurrentHeightResponse{Height: height}, err
 }
 
+func (s *Server) GetSubnetID(ctx context.Context, req *pb.GetSubnetIDRequest) (*pb.GetSubnetIDResponse, error) {
+	chainID, err := ids.ToID(req.ChainId)
+	if err != nil {
+		return nil, err
+	}
+
+	subnetID, err := s.state.GetSubnetID(ctx, chainID)
+	return &pb.GetSubnetIDResponse{
+		SubnetId: subnetID[:],
+	}, err
+}
+
 func (s *Server) GetValidatorSet(ctx context.Context, req *pb.GetValidatorSetRequest) (*pb.GetValidatorSetResponse, error) {
 	subnetID, err := ids.ToID(req.SubnetId)
 	if err != nil {
@@ -51,12 +64,15 @@ func (s *Server) GetValidatorSet(ctx context.Context, req *pb.GetValidatorSetReq
 	}
 
 	i := 0
-	for nodeID, weight := range vdrs {
-		nodeID := nodeID
-		resp.Validators[i] = &pb.Validator{
-			NodeId: nodeID[:],
-			Weight: weight,
+	for _, vdr := range vdrs {
+		vdrPB := &pb.Validator{
+			NodeId: vdr.NodeID[:],
+			Weight: vdr.Weight,
 		}
+		if vdr.PublicKey != nil {
+			vdrPB.PublicKey = bls.PublicKeyToBytes(vdr.PublicKey)
+		}
+		resp.Validators[i] = vdrPB
 		i++
 	}
 	return resp, nil

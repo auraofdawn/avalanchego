@@ -4,6 +4,7 @@
 package executor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -83,6 +84,8 @@ var (
 
 	genesisBlkID ids.ID
 	testSubnet1  *txs.Tx
+
+	errMissingPrimaryValidators = errors.New("missing primary validator set")
 )
 
 type stakerStatus uint
@@ -124,19 +127,6 @@ type environment struct {
 
 func (*environment) ResetBlockTimer() {
 	// dummy call, do nothing for now
-}
-
-// TODO snLookup currently duplicated in vm_test.go. Consider removing duplication
-type snLookup struct {
-	chainsToSubnet map[ids.ID]ids.ID
-}
-
-func (sn *snLookup) SubnetID(chainID ids.ID) (ids.ID, error) {
-	subnetID, ok := sn.chainsToSubnet[chainID]
-	if !ok {
-		return ids.ID{}, errors.New("")
-	}
-	return subnetID, nil
 }
 
 func newEnvironment(t *testing.T, ctrl *gomock.Controller) *environment {
@@ -315,6 +305,7 @@ func defaultCtx(db database.Database) *snow.Context {
 	ctx := snow.DefaultContextTest()
 	ctx.NetworkID = 10
 	ctx.XChainID = xChainID
+	ctx.CChainID = cChainID
 	ctx.AVAXAssetID = avaxAssetID
 
 	atomicDB := prefixdb.New([]byte{1}, db)
@@ -322,11 +313,17 @@ func defaultCtx(db database.Database) *snow.Context {
 
 	ctx.SharedMemory = m.NewSharedMemory(ctx.ChainID)
 
-	ctx.SNLookup = &snLookup{
-		chainsToSubnet: map[ids.ID]ids.ID{
-			constants.PlatformChainID: constants.PrimaryNetworkID,
-			xChainID:                  constants.PrimaryNetworkID,
-			cChainID:                  constants.PrimaryNetworkID,
+	ctx.ValidatorState = &validators.TestState{
+		GetSubnetIDF: func(_ context.Context, chainID ids.ID) (ids.ID, error) {
+			subnetID, ok := map[ids.ID]ids.ID{
+				constants.PlatformChainID: constants.PrimaryNetworkID,
+				xChainID:                  constants.PrimaryNetworkID,
+				cChainID:                  constants.PrimaryNetworkID,
+			}[chainID]
+			if !ok {
+				return ids.Empty, errors.New("missing")
+			}
+			return subnetID, nil
 		},
 	}
 
@@ -334,10 +331,13 @@ func defaultCtx(db database.Database) *snow.Context {
 }
 
 func defaultConfig() *config.Config {
+	vdrs := validators.NewManager()
+	primaryVdrs := validators.NewSet()
+	_ = vdrs.Add(constants.PrimaryNetworkID, primaryVdrs)
 	return &config.Config{
 		Chains:                 chains.MockManager{},
 		UptimeLockedCalculator: uptime.NewLockedCalculator(),
-		Validators:             validators.NewManager(),
+		Validators:             vdrs,
 		TxFee:                  defaultTxFee,
 		CreateSubnetTxFee:      100 * defaultTxFee,
 		CreateBlockchainTxFee:  100 * defaultTxFee,
@@ -472,18 +472,18 @@ func shutdownEnvironment(t *environment) error {
 	}
 
 	if t.isBootstrapped.GetValue() {
-		primaryValidatorSet, exist := t.config.Validators.GetValidators(constants.PrimaryNetworkID)
+		primaryValidatorSet, exist := t.config.Validators.Get(constants.PrimaryNetworkID)
 		if !exist {
-			return errors.New("no default subnet validators")
+			return errMissingPrimaryValidators
 		}
 		primaryValidators := primaryValidatorSet.List()
 
 		validatorIDs := make([]ids.NodeID, len(primaryValidators))
 		for i, vdr := range primaryValidators {
-			validatorIDs[i] = vdr.ID()
+			validatorIDs[i] = vdr.NodeID
 		}
 
-		if err := t.uptimes.Shutdown(validatorIDs); err != nil {
+		if err := t.uptimes.StopTracking(validatorIDs, constants.PrimaryNetworkID); err != nil {
 			return err
 		}
 		if err := t.state.Commit(); err != nil {

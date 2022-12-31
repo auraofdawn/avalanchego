@@ -6,6 +6,7 @@ package txs
 import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 )
 
@@ -31,7 +32,7 @@ type RewardValidatorTx struct {
 	unsignedBytes []byte // Unsigned byte representation of this data
 }
 
-func (tx *RewardValidatorTx) Initialize(unsignedBytes []byte) {
+func (tx *RewardValidatorTx) SetBytes(unsignedBytes []byte) {
 	tx.unsignedBytes = unsignedBytes
 }
 
@@ -41,7 +42,7 @@ func (tx *RewardValidatorTx) Bytes() []byte {
 	return tx.unsignedBytes
 }
 
-func (*RewardValidatorTx) InputIDs() ids.Set {
+func (*RewardValidatorTx) InputIDs() set.Set[ids.ID] {
 	return nil
 }
 

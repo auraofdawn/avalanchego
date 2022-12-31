@@ -5,18 +5,16 @@ package versiondb
 
 import (
 	"context"
-	"sort"
 	"strings"
 	"sync"
+
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/memdb"
 	"github.com/ava-labs/avalanchego/database/nodb"
 	"github.com/ava-labs/avalanchego/utils"
-)
-
-const (
-	iterativeDeleteThreshold = 512
 )
 
 var (
@@ -140,7 +138,7 @@ func (db *Database) NewIteratorWithStartAndPrefix(start, prefix []byte) database
 			keys = append(keys, key)
 		}
 	}
-	sort.Strings(keys) // Keys need to be in sorted order
+	slices.Sort(keys) // Keys need to be in sorted order
 	values := make([]valueDelete, len(keys))
 	for i, key := range keys {
 		values[i] = db.mem[key]
@@ -212,15 +210,7 @@ func (db *Database) Abort() {
 }
 
 func (db *Database) abort() {
-	// If there are a lot of keys, clear the map by just allocating a new one
-	if len(db.mem) > iterativeDeleteThreshold {
-		db.mem = make(map[string]valueDelete, memdb.DefaultSize)
-		return
-	}
-	// If there aren't many keys, clear the map iteratively
-	for key := range db.mem {
-		delete(db.mem, key)
-	}
+	maps.Clear(db.mem)
 }
 
 // CommitBatch returns a batch that contains all uncommitted puts/deletes.

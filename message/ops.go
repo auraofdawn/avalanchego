@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ava-labs/avalanchego/utils/set"
+
 	p2ppb "github.com/ava-labs/avalanchego/proto/pb/p2p"
 )
 
@@ -22,6 +24,7 @@ const (
 	PongOp
 	VersionOp
 	PeerListOp
+	PeerListAckOp
 	// State sync:
 	GetStateSummaryFrontierOp
 	GetStateSummaryFrontierFailedOp
@@ -58,6 +61,7 @@ const (
 	CrossChainAppResponseOp
 	// Internal:
 	ConnectedOp
+	ConnectedSubnetOp
 	DisconnectedOp
 	NotifyOp
 	GossipRequestOp
@@ -70,6 +74,7 @@ var (
 		PongOp,
 		VersionOp,
 		PeerListOp,
+		PeerListAckOp,
 	}
 
 	// List of all consensus request message types
@@ -116,6 +121,7 @@ var (
 		CrossChainAppRequestFailedOp,
 		CrossChainAppResponseOp,
 		ConnectedOp,
+		ConnectedSubnetOp,
 		DisconnectedOp,
 		NotifyOp,
 		GossipRequestOp,
@@ -153,6 +159,7 @@ var (
 		ChitsOp,
 		// Internal
 		ConnectedOp,
+		ConnectedSubnetOp,
 		DisconnectedOp,
 	}
 
@@ -179,7 +186,7 @@ var (
 		AppRequestFailedOp:              AppResponseOp,
 		CrossChainAppRequestFailedOp:    CrossChainAppResponseOp,
 	}
-	UnrequestedOps = map[Op]struct{}{
+	UnrequestedOps = set.Set[Op]{
 		GetAcceptedFrontierOp:     {},
 		GetAcceptedOp:             {},
 		GetAncestorsOp:            {},
@@ -207,6 +214,8 @@ func (op Op) String() string {
 		return "version"
 	case PeerListOp:
 		return "peerlist"
+	case PeerListAckOp:
+		return "peerlist_ack"
 	// State sync
 	case GetStateSummaryFrontierOp:
 		return "get_state_summary_frontier"
@@ -273,6 +282,8 @@ func (op Op) String() string {
 		// Internal
 	case ConnectedOp:
 		return "connected"
+	case ConnectedSubnetOp:
+		return "connected_subnet"
 	case DisconnectedOp:
 		return "disconnected"
 	case NotifyOp:
@@ -297,6 +308,8 @@ func Unwrap(m *p2ppb.Message) (interface{}, error) {
 		return msg.Version, nil
 	case *p2ppb.Message_PeerList:
 		return msg.PeerList, nil
+	case *p2ppb.Message_PeerListAck:
+		return msg.PeerListAck, nil
 	// State sync:
 	case *p2ppb.Message_GetStateSummaryFrontier:
 		return msg.GetStateSummaryFrontier, nil
@@ -352,6 +365,8 @@ func ToOp(m *p2ppb.Message) (Op, error) {
 		return VersionOp, nil
 	case *p2ppb.Message_PeerList:
 		return PeerListOp, nil
+	case *p2ppb.Message_PeerListAck:
+		return PeerListAckOp, nil
 	case *p2ppb.Message_GetStateSummaryFrontier:
 		return GetStateSummaryFrontierOp, nil
 	case *p2ppb.Message_StateSummaryFrontier_:

@@ -9,10 +9,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+
+	"github.com/stretchr/testify/require"
+
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/choices"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
+	"github.com/ava-labs/avalanchego/snow/engine/snowman/block/mocks"
+	"github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/vms/proposervm/block"
 	"github.com/ava-labs/avalanchego/vms/proposervm/proposer"
@@ -810,4 +818,53 @@ func TestBlockVerify_ForkBlockIsOracleBlockButChildrenAreSigned(t *testing.T) {
 	if err == nil {
 		t.Fatal("Should have failed to verify a child that was signed when it should be a pre fork block")
 	}
+}
+
+// Assert that when the underlying VM implements ChainVMWithBuildBlockContext
+// and the proposervm is activated, we only call the VM's BuildBlockWithContext
+// when a P-chain height can be correctly provided from the parent block.
+func TestPreForkBlock_BuildBlockWithContext(t *testing.T) {
+	require := require.New(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	pChainHeight := uint64(1337)
+	blkID := ids.GenerateTestID()
+	innerBlk := snowman.NewMockBlock(ctrl)
+	innerBlk.EXPECT().ID().Return(blkID).AnyTimes()
+	innerBlk.EXPECT().Timestamp().Return(mockable.MaxTime)
+	builtBlk := snowman.NewMockBlock(ctrl)
+	builtBlk.EXPECT().Bytes().Return([]byte{1, 2, 3}).AnyTimes()
+	builtBlk.EXPECT().ID().Return(ids.GenerateTestID()).AnyTimes()
+	builtBlk.EXPECT().Height().Return(pChainHeight).AnyTimes()
+	innerVM := mocks.NewMockChainVM(ctrl)
+	innerVM.EXPECT().BuildBlock(gomock.Any()).Return(builtBlk, nil).AnyTimes()
+	vdrState := validators.NewMockState(ctrl)
+	vdrState.EXPECT().GetMinimumHeight(context.Background()).Return(pChainHeight, nil).AnyTimes()
+
+	vm := &VM{
+		ChainVM: innerVM,
+		ctx: &snow.Context{
+			ValidatorState: vdrState,
+			Log:            logging.NoLog{},
+		},
+	}
+
+	blk := &preForkBlock{
+		Block: innerBlk,
+		vm:    vm,
+	}
+
+	// Should call BuildBlock since proposervm won't have a P-chain height
+	gotChild, err := blk.buildChild(context.Background())
+	require.NoError(err)
+	require.Equal(builtBlk, gotChild.(*postForkBlock).innerBlk)
+
+	// Should call BuildBlock since proposervm is not activated
+	innerBlk.EXPECT().Timestamp().Return(time.Time{})
+	vm.activationTime = mockable.MaxTime
+
+	gotChild, err = blk.buildChild(context.Background())
+	require.NoError(err)
+	require.Equal(builtBlk, gotChild.(*preForkBlock).Block)
 }

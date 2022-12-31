@@ -5,6 +5,7 @@ package info
 
 import (
 	"context"
+	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/rpc"
@@ -13,7 +14,8 @@ import (
 
 var _ Client = (*client)(nil)
 
-// Client interface for an Info API Client
+// Client interface for an Info API Client.
+// See also AwaitBootstrapped.
 type Client interface {
 	GetNodeVersion(context.Context, ...rpc.Option) (*GetNodeVersionReply, error)
 	GetNodeID(context.Context, ...rpc.Option) (ids.NodeID, *signer.ProofOfPossession, error)
@@ -24,7 +26,7 @@ type Client interface {
 	Peers(context.Context, ...rpc.Option) ([]Peer, error)
 	IsBootstrapped(context.Context, string, ...rpc.Option) (bool, error)
 	GetTxFee(context.Context, ...rpc.Option) (*GetTxFeeResponse, error)
-	Uptime(context.Context, ...rpc.Option) (*UptimeResponse, error)
+	Uptime(context.Context, ids.ID, ...rpc.Option) (*UptimeResponse, error)
 	GetVMs(context.Context, ...rpc.Option) (map[ids.ID][]string, error)
 }
 
@@ -98,9 +100,11 @@ func (c *client) GetTxFee(ctx context.Context, options ...rpc.Option) (*GetTxFee
 	return res, err
 }
 
-func (c *client) Uptime(ctx context.Context, options ...rpc.Option) (*UptimeResponse, error) {
+func (c *client) Uptime(ctx context.Context, subnetID ids.ID, options ...rpc.Option) (*UptimeResponse, error) {
 	res := &UptimeResponse{}
-	err := c.requester.SendRequest(ctx, "info.uptime", struct{}{}, res, options...)
+	err := c.requester.SendRequest(ctx, "info.uptime", &UptimeRequest{
+		SubnetID: subnetID,
+	}, res, options...)
 	return res, err
 }
 
@@ -108,4 +112,26 @@ func (c *client) GetVMs(ctx context.Context, options ...rpc.Option) (map[ids.ID]
 	res := &GetVMsReply{}
 	err := c.requester.SendRequest(ctx, "info.getVMs", struct{}{}, res, options...)
 	return res.VMs, err
+}
+
+// AwaitBootstrapped polls the node every [freq] to check if [chainID] has
+// finished bootstrapping. Returns true once [chainID] reports that it has
+// finished bootstrapping.
+// Only returns an error if [ctx] returns an error.
+func AwaitBootstrapped(ctx context.Context, c Client, chainID string, freq time.Duration, options ...rpc.Option) (bool, error) {
+	ticker := time.NewTicker(freq)
+	defer ticker.Stop()
+
+	for {
+		res, err := c.IsBootstrapped(ctx, chainID, options...)
+		if err == nil && res {
+			return true, nil
+		}
+
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
+	}
 }

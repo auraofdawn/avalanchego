@@ -69,12 +69,32 @@ func TestMessage(t *testing.T) {
 			bytesSaved:       false,
 		},
 		{
-			desc: "pong message with no compression",
+			desc: "pong message with no compression no subnet uptimes",
 			op:   PongOp,
 			msg: &p2ppb.Message{
 				Message: &p2ppb.Message_Pong{
 					Pong: &p2ppb.Pong{
-						UptimePct: 1,
+						Uptime: 100,
+					},
+				},
+			},
+			gzipCompress:     false,
+			bypassThrottling: true,
+			bytesSaved:       false,
+		},
+		{
+			desc: "pong message with no compression and subnet uptimes",
+			op:   PongOp,
+			msg: &p2ppb.Message{
+				Message: &p2ppb.Message_Pong{
+					Pong: &p2ppb.Pong{
+						Uptime: 100,
+						SubnetUptimes: []*p2ppb.SubnetUptime{
+							{
+								SubnetId: testID[:],
+								Uptime:   100,
+							},
+						},
 					},
 				},
 			},
@@ -146,6 +166,25 @@ func TestMessage(t *testing.T) {
 			gzipCompress:     true,
 			bypassThrottling: true,
 			bytesSaved:       true,
+		},
+		{
+			desc: "peer_list_ack message with no compression",
+			op:   PeerListAckOp,
+			msg: &p2ppb.Message{
+				Message: &p2ppb.Message_PeerListAck{
+					PeerListAck: &p2ppb.PeerListAck{
+						PeerAcks: []*p2ppb.PeerAck{
+							{
+								TxId:      testID[:],
+								Timestamp: 1,
+							},
+						},
+					},
+				},
+			},
+			gzipCompress:     false,
+			bypassThrottling: false,
+			bytesSaved:       false,
 		},
 		{
 			desc: "get_state_summary_frontier message with no compression",

@@ -57,9 +57,10 @@ var (
 
 type VM struct {
 	block.ChainVM
-	bVM  block.BatchedChainVM
-	hVM  block.HeightIndexedChainVM
-	ssVM block.StateSyncableVM
+	blockBuilderVM block.BuildBlockWithContextChainVM
+	batchedVM      block.BatchedChainVM
+	hVM            block.HeightIndexedChainVM
+	ssVM           block.StateSyncableVM
 
 	activationTime      time.Time
 	minimumPChainHeight uint64
@@ -109,14 +110,16 @@ func New(
 	minimumPChainHeight uint64,
 	minBlkDelay time.Duration,
 ) *VM {
-	bVM, _ := vm.(block.BatchedChainVM)
+	blockBuilderVM, _ := vm.(block.BuildBlockWithContextChainVM)
+	batchedVM, _ := vm.(block.BatchedChainVM)
 	hVM, _ := vm.(block.HeightIndexedChainVM)
 	ssVM, _ := vm.(block.StateSyncableVM)
 	return &VM{
-		ChainVM: vm,
-		bVM:     bVM,
-		hVM:     hVM,
-		ssVM:    ssVM,
+		ChainVM:        vm,
+		blockBuilderVM: blockBuilderVM,
+		batchedVM:      batchedVM,
+		hVM:            hVM,
+		ssVM:           ssVM,
 
 		activationTime:      activationTime,
 		minimumPChainHeight: minimumPChainHeight,
@@ -183,7 +186,8 @@ func (vm *VM) Initialize(
 	})
 
 	vm.verifiedBlocks = make(map[ids.ID]PostForkBlock)
-	context, cancel := context.WithCancel(ctx)
+	detachedCtx := utils.Detach(ctx)
+	context, cancel := context.WithCancel(detachedCtx)
 	vm.context = context
 	vm.onShutdown = cancel
 
@@ -202,7 +206,7 @@ func (vm *VM) Initialize(
 		return err
 	}
 
-	if err := vm.repair(ctx, indexerState); err != nil {
+	if err := vm.repair(detachedCtx, indexerState); err != nil {
 		return err
 	}
 
@@ -738,22 +742,54 @@ func (vm *VM) storePostForkBlock(blk PostForkBlock) error {
 	return vm.db.Commit()
 }
 
-func (vm *VM) verifyAndRecordInnerBlk(ctx context.Context, postFork PostForkBlock) error {
+func (vm *VM) verifyAndRecordInnerBlk(ctx context.Context, blockCtx *block.Context, postFork PostForkBlock) error {
+	innerBlk := postFork.getInnerBlk()
 	postForkID := postFork.ID()
-	// If inner block's Verify returned true, don't call it again.
-	//
-	// Note that if [innerBlk.Verify] returns nil, this method returns nil. This
-	// must always remain the case to maintain the inner block's invariant that
-	// if it's Verify() returns nil, it is eventually accepted or rejected.
-	currentInnerBlk := postFork.getInnerBlk()
-	if originalInnerBlk, contains := vm.Tree.Get(currentInnerBlk); !contains {
-		if err := currentInnerBlk.Verify(ctx); err != nil {
-			return err
+	originalInnerBlock, previouslyVerified := vm.Tree.Get(innerBlk)
+	if previouslyVerified {
+		innerBlk = originalInnerBlock
+		// We must update all of the mappings from postFork -> innerBlock to
+		// now point to originalInnerBlock.
+		postFork.setInnerBlk(originalInnerBlock)
+		vm.innerBlkCache.Put(postForkID, originalInnerBlock)
+	}
+
+	var (
+		shouldVerifyWithCtx = blockCtx != nil
+		blkWithCtx          block.WithVerifyContext
+		err                 error
+	)
+	if shouldVerifyWithCtx {
+		blkWithCtx, shouldVerifyWithCtx = innerBlk.(block.WithVerifyContext)
+		if shouldVerifyWithCtx {
+			shouldVerifyWithCtx, err = blkWithCtx.ShouldVerifyWithContext(ctx)
+			if err != nil {
+				return err
+			}
 		}
-		vm.Tree.Add(currentInnerBlk)
-		vm.innerBlkCache.Put(postForkID, currentInnerBlk)
-	} else {
-		postFork.setInnerBlk(originalInnerBlk)
+	}
+
+	// Invariant: If either [Verify] or [VerifyWithContext] returns nil, this
+	//            function must return nil. This maintains the inner block's
+	//            invariant that successful verification will eventually result
+	//            in accepted or rejected being called.
+	if shouldVerifyWithCtx {
+		// This block needs to know the P-Chain height during verification.
+		// Note that [VerifyWithContext] with context may be called multiple
+		// times with multiple contexts.
+		err = blkWithCtx.VerifyWithContext(ctx, blockCtx)
+	} else if !previouslyVerified {
+		// This isn't a [block.WithVerifyContext] so we only call [Verify] once.
+		err = innerBlk.Verify(ctx)
+	}
+	if err != nil {
+		return err
+	}
+
+	// Since verification passed, we should ensure the inner block tree is
+	// populated.
+	if !previouslyVerified {
+		vm.Tree.Add(innerBlk)
 	}
 	vm.verifiedBlocks[postForkID] = postFork
 	return nil

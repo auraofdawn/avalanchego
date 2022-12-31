@@ -24,6 +24,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow/networking/tracker"
 	"github.com/ava-labs/avalanchego/snow/networking/worker"
 	"github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 
 	p2ppb "github.com/ava-labs/avalanchego/proto/pb/p2p"
@@ -103,6 +104,8 @@ type handler struct {
 	numDispatchersClosed int
 	// Closed when this handler and [engine] are done shutting down
 	closed chan struct{}
+
+	subnetConnector validators.SubnetConnector
 }
 
 // Initialize this consensus handler
@@ -114,6 +117,7 @@ func New(
 	preemptTimeouts chan struct{},
 	gossipFrequency time.Duration,
 	resourceTracker tracker.ResourceTracker,
+	subnetConnector validators.SubnetConnector,
 ) (Handler, error) {
 	h := &handler{
 		ctx:              ctx,
@@ -126,6 +130,7 @@ func New(
 		closingChan:      make(chan struct{}),
 		closed:           make(chan struct{}),
 		resourceTracker:  resourceTracker,
+		subnetConnector:  subnetConnector,
 	}
 
 	var err error
@@ -224,14 +229,15 @@ func (h *handler) Start(ctx context.Context, recoverPanic bool) {
 		return
 	}
 
+	detachedCtx := utils.Detach(ctx)
 	dispatchSync := func() {
-		h.dispatchSync(ctx)
+		h.dispatchSync(detachedCtx)
 	}
 	dispatchAsync := func() {
-		h.dispatchAsync(ctx)
+		h.dispatchAsync(detachedCtx)
 	}
 	dispatchChans := func() {
-		h.dispatchChans(ctx)
+		h.dispatchChans(detachedCtx)
 	}
 	if recoverPanic {
 		go h.ctx.Log.RecoverAndExit(dispatchSync, func() {
@@ -467,7 +473,9 @@ func (h *handler) handleSyncMsg(ctx context.Context, msg message.InboundMessage)
 		return engine.GetStateSummaryFrontierFailed(ctx, nodeID, msg.RequestID)
 
 	case *p2ppb.GetAcceptedStateSummary:
-		if !isUnique(msg.Heights) {
+		// TODO: Enforce that the numbers are sorted to make this verification
+		//       more efficient.
+		if !utils.IsUnique(msg.Heights) {
 			h.ctx.Log.Debug("message with invalid field",
 				zap.Stringer("nodeID", nodeID),
 				zap.Stringer("messageOp", message.GetAcceptedStateSummaryOp),
@@ -637,6 +645,9 @@ func (h *handler) handleSyncMsg(ctx context.Context, msg message.InboundMessage)
 
 	case *message.Connected:
 		return engine.Connected(ctx, nodeID, msg.NodeVersion)
+
+	case *message.ConnectedSubnet:
+		return h.subnetConnector.ConnectedSubnet(ctx, nodeID, msg.SubnetID)
 
 	case *message.Disconnected:
 		return engine.Disconnected(ctx, nodeID)

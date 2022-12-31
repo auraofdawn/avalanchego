@@ -7,13 +7,14 @@ import (
 	"errors"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/set"
 )
 
 var errDuplicatedID = errors.New("inbound message contains duplicated ID")
 
 func getIDs(idsBytes [][]byte) ([]ids.ID, error) {
 	res := make([]ids.ID, len(idsBytes))
-	idSet := ids.NewSet(len(idsBytes))
+	idSet := set.NewSet[ids.ID](len(idsBytes))
 	for i, bytes := range idsBytes {
 		id, err := ids.ToID(bytes)
 		if err != nil {
@@ -26,17 +27,4 @@ func getIDs(idsBytes [][]byte) ([]ids.ID, error) {
 		idSet.Add(id)
 	}
 	return res, nil
-}
-
-// TODO: Enforce that the numbers are sorted to make this verification more
-//       efficient.
-func isUnique(nums []uint64) bool {
-	numsSet := make(map[uint64]struct{}, len(nums))
-	for _, num := range nums {
-		if _, found := numsSet[num]; found {
-			return false
-		}
-		numsSet[num] = struct{}{}
-	}
-	return true
 }

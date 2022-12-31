@@ -12,6 +12,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow/consensus/avalanche"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowstorm"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
+	"github.com/ava-labs/avalanchego/utils/set"
 )
 
 // issuer issues [vtx] into consensus after its dependencies are met.
@@ -19,7 +20,7 @@ type issuer struct {
 	t                 *Transitive
 	vtx               avalanche.Vertex
 	issued, abandoned bool
-	vtxDeps, txDeps   ids.Set
+	vtxDeps, txDeps   set.Set[ids.ID]
 }
 
 // Register that a vertex we were waiting on has been issued to consensus.
@@ -127,7 +128,7 @@ func (i *issuer) Update(ctx context.Context) {
 	}
 
 	// Issue a poll for this vertex.
-	vdrs, err := i.t.Validators.Sample(i.t.Params.K) // Validators to sample
+	vdrIDs, err := i.t.Validators.Sample(i.t.Params.K) // Validators to sample
 	if err != nil {
 		i.t.Ctx.Log.Error("dropped query",
 			zap.String("reason", "insufficient number of validators"),
@@ -136,9 +137,7 @@ func (i *issuer) Update(ctx context.Context) {
 	}
 
 	vdrBag := ids.NodeIDBag{} // Validators to sample repr. as a set
-	for _, vdr := range vdrs {
-		vdrBag.Add(vdr.ID())
-	}
+	vdrBag.Add(vdrIDs...)
 
 	i.t.RequestID++
 	if err == nil && i.t.polls.Add(i.t.RequestID, vdrBag) {
@@ -178,7 +177,7 @@ func (i *issuer) Update(ctx context.Context) {
 
 type vtxIssuer struct{ i *issuer }
 
-func (vi *vtxIssuer) Dependencies() ids.Set {
+func (vi *vtxIssuer) Dependencies() set.Set[ids.ID] {
 	return vi.i.vtxDeps
 }
 
@@ -196,7 +195,7 @@ func (vi *vtxIssuer) Update(ctx context.Context) {
 
 type txIssuer struct{ i *issuer }
 
-func (ti *txIssuer) Dependencies() ids.Set {
+func (ti *txIssuer) Dependencies() set.Set[ids.ID] {
 	return ti.i.txDeps
 }
 
